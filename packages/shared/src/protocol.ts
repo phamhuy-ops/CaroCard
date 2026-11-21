@@ -1,4 +1,5 @@
 import { z } from 'zod';
+export { default as gameConstants } from '../../../spec/data/constants.json' with { type: 'json' };
 
 const phase = z.enum(['LOBBY', 'PREPARATION', 'ACTION', 'ROUND_END', 'FINISHED']);
 const face = z.enum(['heads', 'tails']);
@@ -12,6 +13,7 @@ export const commandSchema = z.discriminatedUnion('type', [
   z.strictObject({ ...commandFields, type: z.literal('chooseFace'), face }),
   z.strictObject({ ...commandFields, type: z.literal('toss') }),
   z.strictObject({ ...commandFields, type: z.literal('start') }),
+  z.strictObject({ ...commandFields, type: z.literal('ready') }),
   z.strictObject({
     ...commandFields, type: z.literal('place'), row: z.int().nonnegative(), col: z.int().nonnegative(),
   }),
@@ -47,6 +49,8 @@ export const ErrorCode = {
   CoinRequired: 'COIN_REQUIRED',
   WrongTurn: 'WRONG_TURN',
   InvalidCell: 'INVALID_CELL',
+  AlreadyReady: 'ALREADY_READY',
+  ChoicePending: 'CHOICE_PENDING',
 } as const;
 
 export type ErrorCode = typeof ErrorCode[keyof typeof ErrorCode];
@@ -65,6 +69,19 @@ interface PublicPlayer {
   seat: Seat | null;
 }
 
+export interface Preparation {
+  deadline: number;
+  ready: boolean;
+}
+
+export interface ChoiceWindow {
+  id: string;
+  seat: Seat;
+  kind: 'ultimatum' | 'belial';
+  deadline: number;
+  resumeRemainingMs: number;
+}
+
 export interface Snapshot {
   roomCode: string;
   phase: Phase;
@@ -73,8 +90,14 @@ export interface Snapshot {
   players: PublicPlayer[];
   coin: Face | null;
   board: readonly (Seat | 'Dark Wall' | 'Makeshift Wall' | null)[];
+  round: number;
+  coins: Record<Seat, number>;
+  preparation: Record<Seat, Preparation> | null;
+  actionDeadline: number | null;
+  choiceWindow: ChoiceWindow | null;
   turn: Seat | null;
-  result: { kind: 'win'; winner: Seat; reason: 'hellsDealer' | 'fiveInRow' } | { kind: 'draw' } | null;
+  result: { kind: 'win'; winner: Seat; reason: 'hellsDealer' | 'fiveInRow' | 'disconnect' }
+    | { kind: 'draw' | 'cancelled' } | null;
   you: PublicPlayer & { privateState: PrivateState };
 }
 

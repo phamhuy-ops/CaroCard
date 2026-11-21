@@ -72,3 +72,27 @@
 - Trả lời nguyên văn: commit lên github tiếng việt
 - Quyết định: Tạo commit M2 với lời nhắn tiếng Việt và đẩy nhánh main lên GitHub.
 - File bị ảnh hưởng: DECISIONS_LOG.md và các tệp triển khai M2.
+
+## 2026-11-21 — P-02 (M3)
+
+- Trả lời nguyên văn: A
+- Quyết định: Duyệt kế hoạch M3.
+- File bị ảnh hưởng: DECISIONS_LOG.md.
+
+## 2026-11-21 — D-03 (M3)
+
+- Trả lời nguyên văn: A
+- Quyết định: Nếu cả hai offline, chờ ghế còn hạn quay lại. Người quay lại sau khi ghế kia hết hạn thắng. Nếu cả hai hết hạn, hủy ván. Kết quả đã xác nhận trên bàn cờ được giữ nguyên.
+- File bị ảnh hưởng: apps/server/, apps/web/, packages/shared/ và DECISIONS_LOG.md.
+
+## 2026-11-21 — A-04 (M3)
+
+- Trả lời nguyên văn: t đã test thử và đã đúng
+- Quyết định: Nghiệm thu M3 qua LAN trên máy tính và điện thoại. Ảnh cho thấy đồng hồ vẫn chạy khi X mất kết nối, điện thoại tự thử kết nối lại và O thắng khi ghế X hết hạn.
+- File bị ảnh hưởng: DECISIONS_LOG.md.
+
+## 2026-11-21 — P-05 (M3)
+
+- Trả lời nguyên văn: OK vậy push M3 lên thôi
+- Quyết định: Tạo commit M3 bằng tiếng Việt và đẩy nhánh main lên GitHub.
+- File bị ảnh hưởng: DECISIONS_LOG.md và các tệp triển khai M3.

@@ -11,6 +11,14 @@ function setup() {
   return { room, host, guest };
 }
 
+function startAction({ room, host, guest }: ReturnType<typeof setup>) {
+  room.execute(host, { type: 'toss', commandId: '2', expectedPhase: 'LOBBY' });
+  room.execute(host, { type: 'start', commandId: '3', expectedPhase: 'LOBBY' });
+  for (const player of [host, guest]) {
+    room.execute(player, { type: 'ready', commandId: 'ready', expectedPhase: 'PREPARATION' });
+  }
+}
+
 describe('room commands', () => {
   test('only the host can toss and start, and the coin assigns opposite seats', () => {
     const { room, host, guest } = setup();
@@ -26,8 +34,7 @@ describe('room commands', () => {
 
   test('a repeated command cannot apply twice and invalid phase or turn does not commit', () => {
     const { room, host, guest } = setup();
-    room.execute(host, { type: 'toss', commandId: '2', expectedPhase: 'LOBBY' });
-    room.execute(host, { type: 'start', commandId: '3', expectedPhase: 'LOBBY' });
+    startAction({ room, host, guest });
     const move = { type: 'place', commandId: '4', expectedPhase: 'ACTION', row: 0, col: 0 } as const;
     expect(room.execute(guest, move).error).toBe('WRONG_TURN');
     expect(room.execute(host, { ...move, expectedPhase: 'LOBBY' }).error).toBe('WRONG_PHASE');
@@ -46,8 +53,7 @@ describe('room commands', () => {
       };
     }
     const rng = createRng(42);
-    room.execute(host, { type: 'toss', commandId: '2', expectedPhase: 'LOBBY' });
-    room.execute(host, { type: 'start', commandId: '3', expectedPhase: 'LOBBY' });
+    startAction({ room, host, guest });
     for (let index = 0; index < 200; index++) {
       const player = rng.next() < 0.5 ? host : guest;
       const payload = room.execute(player, {

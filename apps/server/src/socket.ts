@@ -13,7 +13,21 @@ function send(socket: WebSocket, message: ServerMessage) {
 export function attachGameSocket(server: Server) {
   const rooms = new Map<string, Room>();
   const sockets = new Map<Player, WebSocket>();
+  const timers = new Map<Room, ReturnType<typeof setTimeout>>();
+  const alive = new WeakSet<WebSocket>();
   const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 4096 });
+  const heartbeat = setInterval(() => {
+    for (const socket of wss.clients) {
+      if (!alive.delete(socket)) socket.terminate();
+      else if (socket.readyState === WebSocket.OPEN) socket.ping();
+    }
+  }, 5000);
+  heartbeat.unref();
+  wss.on('close', () => {
+    clearInterval(heartbeat);
+    for (const timer of timers.values()) clearTimeout(timer);
+    timers.clear();
+  });
 
   function broadcast(room: Room) {
     for (const player of room.players) {
@@ -22,7 +36,30 @@ export function attachGameSocket(server: Server) {
     }
   }
 
+  function schedule(room: Room) {
+    clearTimeout(timers.get(room));
+    const deadline = room.nextDeadline;
+    if (!Number.isFinite(deadline)) {
+      timers.delete(room);
+      return;
+    }
+    const timer = setTimeout(() => {
+      const at = performance.now();
+      void room.enqueue(() => {
+        if (timers.get(room) !== timer) return;
+        const previous = room.revision;
+        room.advance(at);
+        if (room.revision !== previous) broadcast(room);
+        schedule(room);
+      }).catch(() => console.error(JSON.stringify({ roomId: room.code, reason: 'TIMER_FAILED' })));
+    }, Math.max(1, Math.ceil(deadline - performance.now() + 1)));
+    timer.unref();
+    timers.set(room, timer);
+  }
+
   wss.on('connection', socket => {
+    alive.add(socket);
+    socket.on('pong', () => alive.add(socket));
     let session: { room: Room; player: Player } | undefined;
     const fail = (error: ErrorCode) => send(socket, { type: 'error', error });
     const run = (room: Room, work: () => void) => {
@@ -34,6 +71,7 @@ export function attachGameSocket(server: Server) {
 
     socket.on('error', () => socket.terminate());
     socket.on('message', (raw, isBinary) => {
+      const receivedAt = performance.now();
       if (isBinary) return fail(ErrorCode.InvalidMessage);
       let input: unknown;
       try {
@@ -48,10 +86,10 @@ export function attachGameSocket(server: Server) {
         if (!session) return fail(ErrorCode.InvalidSession);
         const { room, player } = session;
         const { command } = message;
-        const receivedAt = performance.now();
         run(room, () => {
           if (sockets.get(player) !== socket) return fail(ErrorCode.InvalidSession);
-          const result = room.execute(player, command);
+          const previous = room.revision;
+          const result = room.execute(player, command, receivedAt);
           send(socket, result);
           console.log(JSON.stringify({
             roomId: room.code,
@@ -61,7 +99,8 @@ export function attachGameSocket(server: Server) {
             reason: result.duplicate ? 'DUPLICATE' : result.error ?? 'ACCEPTED',
             ms: performance.now() - receivedAt,
           }));
-          if (!result.error && !result.duplicate) broadcast(room);
+          if (room.revision !== previous) broadcast(room);
+          schedule(room);
         });
         return;
       }
@@ -87,9 +126,14 @@ export function attachGameSocket(server: Server) {
         if (message.type === 'resume') {
           const existing = selectedRoom.players.find(other => other.token === message.token);
           if (!existing) return fail(ErrorCode.InvalidSession);
+          const previous = selectedRoom.revision;
+          if (!selectedRoom.reconnect(existing, receivedAt)) {
+            if (selectedRoom.revision !== previous) broadcast(selectedRoom);
+            schedule(selectedRoom);
+            return fail(ErrorCode.InvalidSession);
+          }
           player = existing;
-          sockets.get(player)?.close(1000, 'Session replaced');
-          selectedRoom.setOnline(player, true);
+          sockets.get(player)?.close(4001, 'Session replaced');
         } else {
           if (selectedRoom.players.length >= 2 || selectedRoom.phase !== 'LOBBY') {
             return fail(ErrorCode.RoomFull);
@@ -100,17 +144,20 @@ export function attachGameSocket(server: Server) {
         sockets.set(player, socket);
         send(socket, { type: 'session', roomCode: selectedRoom.code, token: player.token });
         broadcast(selectedRoom);
+        schedule(selectedRoom);
       });
     });
 
     socket.on('close', () => {
+      const closedAt = performance.now();
       if (!session) return;
       const { room, player } = session;
       run(room, () => {
         if (sockets.get(player) !== socket) return;
         sockets.delete(player);
-        room.setOnline(player, false);
+        room.setOnline(player, false, closedAt);
         broadcast(room);
+        schedule(room);
       });
     });
   });
