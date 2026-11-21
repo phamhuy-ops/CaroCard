@@ -96,3 +96,21 @@
 - Trả lời nguyên văn: OK vậy push M3 lên thôi
 - Quyết định: Tạo commit M3 bằng tiếng Việt và đẩy nhánh main lên GitHub.
 - File bị ảnh hưởng: DECISIONS_LOG.md và các tệp triển khai M3.
+
+## 2026-11-21 — P-02 (M4)
+
+- Trả lời nguyên văn: A
+- Quyết định: Duyệt kế hoạch M4.
+- File bị ảnh hưởng: packages/game-engine/, packages/shared/, apps/server/, apps/web/ và DECISIONS_LOG.md.
+
+## 2026-11-21 — Nghiệm thu M4
+
+- Trả lời nguyên văn: Ok đã ổn các chức năng ở trên
+- Quyết định: Xác nhận Shop, Bench và các thao tác M4 hoạt động trong ván thử. Ảnh cho thấy Cutpurse 2★, ô đã mua để trống và các bản Piggy Bank giữ riêng.
+- File bị ảnh hưởng: DECISIONS_LOG.md.
+
+## 2026-11-21 — P-05 (M4)
+
+- Trả lời nguyên văn: M4 commit lên
+- Quyết định: Tạo commit M4 bằng tiếng Việt và đẩy nhánh main lên GitHub.
+- File bị ảnh hưởng: DECISIONS_LOG.md và các tệp triển khai M4.

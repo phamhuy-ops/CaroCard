@@ -14,6 +14,10 @@ export const commandSchema = z.discriminatedUnion('type', [
   z.strictObject({ ...commandFields, type: z.literal('toss') }),
   z.strictObject({ ...commandFields, type: z.literal('start') }),
   z.strictObject({ ...commandFields, type: z.literal('ready') }),
+  z.strictObject({ ...commandFields, type: z.literal('toggleHold'), round: z.int().positive() }),
+  z.strictObject({ ...commandFields, type: z.literal('reroll'), round: z.int().positive() }),
+  z.strictObject({ ...commandFields, type: z.literal('buy'), round: z.int().positive(), slot: z.int().nonnegative() }),
+  z.strictObject({ ...commandFields, type: z.literal('discard'), round: z.int().positive(), slot: z.int().nonnegative() }),
   z.strictObject({
     ...commandFields, type: z.literal('place'), row: z.int().nonnegative(), col: z.int().nonnegative(),
   }),
@@ -51,13 +55,30 @@ export const ErrorCode = {
   InvalidCell: 'INVALID_CELL',
   AlreadyReady: 'ALREADY_READY',
   ChoicePending: 'CHOICE_PENDING',
+  ShopHeld: 'SHOP_HELD',
+  NotEnoughCoins: 'NOT_ENOUGH_COINS',
+  SlotBlocked: 'SLOT_BLOCKED',
+  EmptySlot: 'EMPTY_SLOT',
+  BenchFull: 'BENCH_FULL',
+  CardAlreadyOwned: 'CARD_ALREADY_OWNED',
+  DemonLimit: 'DEMON_LIMIT',
+  CannotDiscard: 'CANNOT_DISCARD',
 } as const;
 
 export type ErrorCode = typeof ErrorCode[keyof typeof ErrorCode];
 
+export interface CardView {
+  id: string;
+  name: string;
+  rarity: string;
+  cost: number;
+}
+
 export interface PrivateState {
-  shop: string[];
-  bench: string[];
+  shop: { card: CardView | null; blocked: boolean }[];
+  bench: (CardView & { star: number; canDiscard: boolean })[];
+  hold: boolean;
+  freeRerolls: number;
   curseProgress: Record<string, number>;
   transactions: string[];
 }

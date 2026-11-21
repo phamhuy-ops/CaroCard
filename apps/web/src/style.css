@@ -82,3 +82,44 @@ button:focus-visible { outline: 2px solid white; outline-offset: -2px; }
 .restart[aria-pressed="true"] { border-color: #a7e8c6; color: #a7e8c6; }
 .restart:disabled { cursor: default; opacity: .55; }
 [role="alert"] { color: #ffc09f; }
+
+.shop-panel {
+  margin-block: 1rem;
+}
+
+.shop-panel h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.shop-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: .5rem;
+}
+
+.shop-slots, .bench-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 8rem), 1fr));
+  gap: .45rem;
+  list-style: none;
+  padding: 0;
+  margin: .5rem 0 1rem;
+}
+
+.shop-card {
+  display: grid;
+  align-content: space-between;
+  gap: .45rem;
+  padding: .6rem;
+  border: 1px solid #607473;
+  border-radius: .4rem;
+  background: #223031;
+}
+
+.shop-card span {
+  font-size: .9rem;
+  color: #beccca;
+}

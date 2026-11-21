@@ -19,7 +19,75 @@ const errors: Record<string, string> = {
   INVALID_CELL: 'Ô này không còn trống hoặc nằm ngoài bàn.',
   ALREADY_READY: 'Bạn đã sẵn sàng.',
   CHOICE_PENDING: 'Đang chờ lựa chọn.',
+  SHOP_HELD: 'Tắt giữ Shop trước khi đổi.',
+  NOT_ENOUGH_COINS: 'Bạn không đủ xu.',
+  SLOT_BLOCKED: 'Ô Shop này đang bị khóa.',
+  EMPTY_SLOT: 'Ô này đang trống.',
+  BENCH_FULL: 'Kho bài đã đầy.',
+  CARD_ALREADY_OWNED: 'Bạn đã có thẻ này trong kho.',
+  DEMON_LIMIT: 'Bạn đã có tối đa hai Demon đang khóa.',
+  CANNOT_DISCARD: 'Thẻ này không thể vứt từ kho.',
 };
+
+const rarityLabels: Record<string, string> = {
+  common: 'Thường', rare: 'Hiếm', epic: 'Sử thi', legendary: 'Huyền thoại',
+  special: 'Đặc biệt', demon: 'Demon',
+};
+
+function ShopPanel({ snapshot, disabled, command }: {
+  snapshot: Snapshot;
+  disabled: boolean;
+  command: (action: ClientAction) => void;
+}) {
+  const { shop, bench, hold, freeRerolls } = snapshot.you.privateState;
+  const { round } = snapshot;
+  const seat = snapshot.you.seat;
+  const canTrade = !disabled && seat !== null && snapshot.preparation?.[seat].ready === false;
+  const coins = seat ? snapshot.coins[seat] : 0;
+
+  return (
+    <section className="shop-panel" aria-label="Shop và kho bài của bạn">
+      <div className="shop-header">
+        <h2>Shop</h2>
+        <div className="room-actions">
+          <button className="restart" aria-pressed={hold} disabled={!canTrade}
+            onClick={() => command({ type: 'toggleHold', round })}>{hold ? 'Bỏ giữ Shop' : 'Giữ Shop'}</button>
+          <button className="restart" disabled={!canTrade || hold}
+            onClick={() => command({ type: 'reroll', round })}>
+            {freeRerolls ? `Đổi Shop · ${freeRerolls} miễn phí` : 'Đổi Shop bằng xu'}
+          </button>
+        </div>
+      </div>
+      <ul className="shop-slots">
+        {shop.map(({ card, blocked }, slot) => (
+          <li className="shop-card" key={slot}>
+            {card ? <>
+              <strong>{card.name}</strong>
+              <span>{rarityLabels[card.rarity]} · {card.cost} xu</span>
+              <button className="restart" disabled={!canTrade || blocked || card.cost > coins}
+                aria-label={blocked ? `Ô ${slot + 1} bị khóa` : `Mua ${card.name} ở ô ${slot + 1}`}
+                onClick={() => command({ type: 'buy', round, slot })}>{blocked ? 'Bị khóa' : 'Mua'}</button>
+            </> : <span>{blocked ? 'Ô trống bị khóa' : 'Ô trống'}</span>}
+          </li>
+        ))}
+      </ul>
+      <h2>Kho bài</h2>
+      {bench.length === 0 ? <p>Kho trống</p> : (
+        <ul className="bench-list">
+          {bench.map((card, slot) => (
+            <li className="shop-card" key={slot}>
+              <strong>{card.name}{card.star > 0 ? ` · ${card.star}★` : ''}</strong>
+              <span>{card.rarity === 'demon' ? 'Demon · Đang khóa' : rarityLabels[card.rarity]}</span>
+              {card.canDiscard && <button className="restart" disabled={!canTrade}
+                aria-label={`Vứt ${card.name} ở ô ${slot + 1}`}
+                onClick={() => command({ type: 'discard', round, slot })}>Vứt</button>}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
 
 function commandId() {
   // getRandomValues is also available over HTTP on the local network.
@@ -207,9 +275,11 @@ export function OnlineGame({ renderBoard }: {
               {snapshot.phase === 'ACTION' && <p>Lượt của {snapshot.turn}{snapshot.actionDeadline !== null
                 ? ` · ${seconds(snapshot.actionDeadline)} giây`
                 : snapshot.choiceWindow ? ` · Còn ${seconds(snapshot.choiceWindow.deadline)} giây để chọn` : ' · Đang chờ lựa chọn'}</p>}
+              {snapshot.preparation && <ShopPanel snapshot={snapshot} disabled={disabled} command={command} />}
               {renderBoard(snapshot.board, !disabled && snapshot.phase === 'ACTION'
                 && snapshot.actionDeadline !== null && snapshot.turn === snapshot.you.seat,
                 (row, col) => command({ type: 'place', row, col }))}
+              {!snapshot.preparation && <ShopPanel snapshot={snapshot} disabled={disabled} command={command} />}
             </>
           )}
         </>

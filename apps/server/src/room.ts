@@ -2,6 +2,8 @@ import { randomBytes, randomInt, randomUUID } from 'node:crypto';
 import { boardSize, createGame, placeTurn } from '@carocard/game-engine';
 import { createRng } from '@carocard/game-engine/rng';
 import type { Rng } from '@carocard/game-engine/rng';
+import { buy, canDiscard, cardDefinition, createShop, discard, refreshShop, reroll } from '@carocard/game-engine/shop';
+import type { Shop } from '@carocard/game-engine/shop';
 import { ErrorCode, gameConstants } from '@carocard/shared';
 import type { ChoiceWindow, Command, CommandResult, Face, Phase, Preparation, PrivateState, Seat, Snapshot } from '@carocard/shared';
 
@@ -21,7 +23,8 @@ export interface Player {
   online: boolean;
   face: Face | null;
   seat: Seat | null;
-  privateState: PrivateState;
+  shop: Shop;
+  privateState: Pick<PrivateState, 'curseProgress' | 'transactions'>;
   commands: Map<string, CommandResult>;
   holdUntil: number | null;
   expired: boolean;
@@ -29,6 +32,11 @@ export interface Player {
 
 function publicPlayer({ host, online, face, seat }: Player) {
   return { host, online, face, seat };
+}
+
+function cardView(cardId: string) {
+  const { id, name, rarity, cost } = cardDefinition(cardId);
+  return { id, name, rarity, cost };
 }
 
 export class Room {
@@ -49,6 +57,7 @@ export class Room {
   private readonly tossCoin: () => Face;
   private readonly now: () => number;
   private readonly rng: Rng;
+  private readonly shopRng: Record<Seat, Rng>;
   private readonly prepDuration: (seat: Seat) => number;
   private readonly roundEndStep?: RoomOptions['roundEndStep'];
 
@@ -57,6 +66,7 @@ export class Room {
     this.tossCoin = tossCoin;
     this.now = options.now ?? (() => performance.now());
     this.rng = options.rng ?? createRng(randomBytes(4).readUInt32LE());
+    this.shopRng = { X: createRng(randomBytes(4).readUInt32LE()), O: createRng(randomBytes(4).readUInt32LE()) };
     this.prepDuration = options.prepDuration ?? (() => timersMs.prep);
     this.roundEndStep = options.roundEndStep;
   }
@@ -75,7 +85,8 @@ export class Room {
       online: true,
       face: null,
       seat: null,
-      privateState: { shop: [], bench: [], curseProgress: {}, transactions: [] },
+      shop: createShop(),
+      privateState: { curseProgress: {}, transactions: [] },
       commands: new Map(),
       holdUntil: null,
       expired: false,
@@ -194,12 +205,18 @@ export class Room {
         for (const seat of seats) {
           if (step === 'coin+1') this.coins[seat] += coinsPerRound;
           this.roundEndStep?.(step, seat);
+          if (step === 'shopRefreshAndReroll') this.refreshSeatShop(seat, this.round + 1);
         }
       }
       this.beginPreparation(at);
     } else {
       this.actionDeadline = at + timersMs.action;
     }
+  }
+
+  private refreshSeatShop(seat: Seat, round: number) {
+    const player = this.players.find(player => player.seat === seat);
+    if (player) player.shop = refreshShop(player.shop, round, this.shopRng[seat]);
   }
 
   openChoice(seat: Seat, kind: ChoiceWindow['kind'], at: number) {
@@ -224,7 +241,8 @@ export class Room {
   }
 
   snapshot(player: Player): Snapshot {
-    const { shop, bench, curseProgress, transactions } = player.privateState;
+    const { curseProgress, transactions } = player.privateState;
+    const { slots, bench, blocks, hold, freeRerolls } = player.shop;
     return {
       roomCode: this.code,
       phase: this.phase,
@@ -242,7 +260,11 @@ export class Room {
       result: this.game.result ?? this.connectionResult,
       you: {
         ...publicPlayer(player),
-        privateState: { shop: [...shop], bench: [...bench], curseProgress: { ...curseProgress }, transactions: [...transactions] },
+        privateState: {
+          shop: slots.map((id, index) => ({ card: id === null ? null : cardView(id), blocked: blocks[index] !== null })),
+          bench: bench.map(({ cardId, star }) => ({ ...cardView(cardId), star, canDiscard: canDiscard(cardId) })),
+          hold, freeRerolls, curseProgress: { ...curseProgress }, transactions: [...transactions],
+        },
       },
     };
   }
@@ -260,6 +282,23 @@ export class Room {
 
   private apply(player: Player, command: Command, at: number): ErrorCode | undefined {
     if (command.expectedPhase !== this.phase) return ErrorCode.WrongPhase;
+    if ('round' in command) {
+      const seat = player.seat;
+      if (!this.preparation || !seat || command.round !== this.round) return ErrorCode.WrongPhase;
+      if (this.preparation[seat].ready) return ErrorCode.AlreadyReady;
+      if (command.type === 'toggleHold') {
+        player.shop = { ...player.shop, hold: !player.shop.hold };
+        return;
+      }
+      const coins = this.coins[seat];
+      const result = command.type === 'reroll' ? reroll(player.shop, coins, this.round, this.shopRng[seat])
+        : command.type === 'buy' ? buy(player.shop, coins, command.slot)
+          : discard(player.shop, coins, command.slot);
+      if ('error' in result) return result.error;
+      player.shop = result.shop;
+      this.coins[seat] = result.coins;
+      return;
+    }
     if (command.type === 'ready') {
       if (!this.preparation || !player.seat) return ErrorCode.WrongPhase;
       if (this.preparation[player.seat].ready) return ErrorCode.AlreadyReady;
@@ -292,6 +331,7 @@ export class Room {
       return;
     }
     if (!this.coin || !this.players.every(other => other.online)) return ErrorCode.CoinRequired;
+    for (const seat of seats) this.refreshSeatShop(seat, this.round + 1);
     this.beginPreparation(at);
   }
 }

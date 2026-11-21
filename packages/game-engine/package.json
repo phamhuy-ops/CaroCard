@@ -4,6 +4,7 @@
   "type": "module",
   "exports": {
     ".": "./src/board.ts",
-    "./rng": "./src/rng.ts"
+    "./rng": "./src/rng.ts",
+    "./shop": "./src/shop.ts"
   }
 }

@@ -49,7 +49,7 @@ describe('room commands', () => {
     const { room, host, guest } = setup();
     for (const [player, marker] of [[host, 'secret-host'], [guest, 'secret-guest']] as const) {
       player.privateState = {
-        shop: [marker], bench: [marker], curseProgress: { [marker]: 1 }, transactions: [marker],
+        curseProgress: { [marker]: 1 }, transactions: [marker],
       };
     }
     const rng = createRng(42);
@@ -71,5 +71,30 @@ describe('room commands', () => {
         expect(output).not.toContain(guest.token);
       }
     }
+  });
+
+  test('shop, bench and block sources remain private after a purchase and readiness', () => {
+    const { room, host, guest } = setup();
+    room.execute(host, { type: 'toss', commandId: '2', expectedPhase: 'LOBBY' });
+    room.execute(host, { type: 'start', commandId: '3', expectedPhase: 'LOBBY' });
+    host.shop.slots = ['SPC-01', 'BUF-C02', null, null];
+    host.shop.blocks[0] = 'host-block-source';
+    guest.shop.slots = ['DEB-C01', null, null, null];
+    guest.shop.bench = [{ cardId: 'DMN-03', star: 0 }];
+    const purchase = { type: 'buy', round: 1, slot: 1, commandId: 'purchase', expectedPhase: 'PREPARATION' } as const;
+    const result = room.execute(host, purchase);
+    expect(result.error).toBeUndefined();
+    const x = room.snapshot(host);
+    const o = room.snapshot(guest);
+    expect(x.coins.X).toBe(2);
+    expect(x.you.privateState.bench[0].id).toBe('BUF-C02');
+    expect(x.you.privateState.shop[1].card).toBeNull();
+    expect(x.you.privateState.shop[0].blocked).toBe(true);
+    expect(JSON.stringify([x, result])).not.toMatch(/DEB-C01|DMN-03|host-block-source/);
+    expect(JSON.stringify(o)).not.toMatch(/SPC-01|BUF-C02|host-block-source/);
+    expect(room.execute(host, purchase).duplicate).toBe(true);
+    expect(room.snapshot(host).coins.X).toBe(2);
+    room.execute(host, { type: 'ready', commandId: 'ready', expectedPhase: 'PREPARATION' });
+    expect(room.execute(host, { ...purchase, commandId: 'after-ready' }).error).toBe('ALREADY_READY');
   });
 });
