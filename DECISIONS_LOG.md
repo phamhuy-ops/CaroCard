@@ -30,3 +30,21 @@
 - Trả lời nguyên văn: `A`
 - Quyết định: Tạo commit đầu trên máy cho workspace M0, `AGENTS.md` và `spec/`. Giữ `CAROCARD_Luat_Da_Chot.docx` ngoài commit.
 - File bị ảnh hưởng: `DECISIONS_LOG.md` và các file thuộc commit khởi tạo M0.
+
+## 2026-11-21 — P-02 (M1)
+
+- Trả lời nguyên văn: `A`
+- Quyết định: Duyệt kế hoạch M1.
+- File bị ảnh hưởng: `packages/game-engine/`, `apps/web/`, `pnpm-lock.yaml` và `DECISIONS_LOG.md`.
+
+## 2026-11-21 — A-03 (M1)
+
+- Trả lời nguyên văn: `approved`
+- Quyết định: Xác nhận ván chơi thử hai người trên cùng máy đạt yêu cầu M1. Ảnh đính kèm hiển thị kết quả X thắng.
+- File bị ảnh hưởng: `DECISIONS_LOG.md`.
+
+## 2026-11-21 — P-05 (M1)
+
+- Trả lời nguyên văn: `[https://github.com/phamhuy-ops/CaroCard.git](https://github.com/phamhuy-ops/CaroCard.git) đây là link hãy commit M1 lên với tiếng việt nha`
+- Quyết định: Dùng lời nhắn tiếng Việt cho commit M1 và đẩy nhánh `main` lên GitHub.
+- File bị ảnh hưởng: `DECISIONS_LOG.md` và cấu hình remote của repo local.

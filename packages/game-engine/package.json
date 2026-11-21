@@ -1,5 +1,9 @@
 {
   "name": "@carocard/game-engine",
   "private": true,
-  "type": "module"
+  "type": "module",
+  "exports": {
+    ".": "./src/board.ts",
+    "./rng": "./src/rng.ts"
+  }
 }

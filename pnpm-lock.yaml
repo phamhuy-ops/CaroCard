@@ -39,6 +39,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@carocard/game-engine':
+        specifier: workspace:*
+        version: link:../../packages/game-engine
       react:
         specifier: ^19.0.0
         version: 19.3.1

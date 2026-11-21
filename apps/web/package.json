@@ -6,6 +6,7 @@
     "dev": "vite --host 127.0.0.1 --strictPort"
   },
   "dependencies": {
+    "@carocard/game-engine": "workspace:*",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
