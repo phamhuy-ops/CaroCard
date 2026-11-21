@@ -1,0 +1,23 @@
+{
+  "name": "carocard",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.25.0",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "dev": "pnpm --parallel --filter @carocard/server --filter @carocard/web run dev"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.0",
+    "@types/node": "^24.0.0",
+    "eslint": "^10.0.0",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.50.0",
+    "vitest": "^4.0.0"
+  }
+}

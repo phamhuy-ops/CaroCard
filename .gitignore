@@ -1,0 +1,5 @@
+node_modules/
+dist/
+
+# Match logs generated when RECORD_MATCH is enabled
+records/

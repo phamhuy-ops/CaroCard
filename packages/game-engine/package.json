@@ -1,0 +1,5 @@
+{
+  "name": "@carocard/game-engine",
+  "private": true,
+  "type": "module"
+}

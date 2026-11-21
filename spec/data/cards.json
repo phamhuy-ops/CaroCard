@@ -1,0 +1,207 @@
+[
+  {
+    "id": "BUF-C01",
+    "name": "Rarity Up",
+    "rarity": "common",
+    "group": "buff",
+    "cost": 1,
+    "maxStar": 3,
+    "spec": "rules/05_normal_cards.md"
+  },
+  {
+    "id": "BUF-C02",
+    "name": "Hair-Trigger",
+    "rarity": "common",
+    "group": "buff",
+    "cost": 1,
+    "maxStar": 3,
+    "spec": "rules/05_normal_cards.md"
+  },
+  {
+    "id": "DEB-C01",
+    "name": "Shop Disruption",
+    "rarity": "common",
+    "group": "debuff",
+    "cost": 1,
+    "maxStar": 3,
+    "spec": "rules/05_normal_cards.md"
+  },
+  {
+    "id": "DEB-C02",
+    "name": "Cutpurse",
+    "rarity": "common",
+    "group": "debuff",
+    "cost": 1,
+    "maxStar": 3,
+    "spec": "rules/05_normal_cards.md"
+  },
+  {
+    "id": "INT-C01",
+    "name": "Aurelia Pocket",
+    "rarity": "common",
+    "group": "interest",
+    "cost": 1,
+    "maxStar": 3,
+    "spec": "rules/05_normal_cards.md"
+  },
+  {
+    "id": "BUF-R01",
+    "name": "New Angle",
+    "rarity": "rare",
+    "group": "buff",
+    "cost": 2,
+    "maxStar": 3,
+    "spec": "rules/05_normal_cards.md"
+  },
+  {
+    "id": "DEB-R01",
+    "name": "Brutal Ultimatum",
+    "rarity": "rare",
+    "group": "debuff",
+    "cost": 2,
+    "maxStar": 3,
+    "spec": "rules/05_normal_cards.md",
+    "opensPopup": true
+  },
+  {
+    "id": "DEB-R02",
+    "name": "Jester's Bargain",
+    "rarity": "rare",
+    "group": "debuff",
+    "cost": 2,
+    "maxStar": 3,
+    "spec": "rules/05_normal_cards.md"
+  },
+  {
+    "id": "INT-R01",
+    "name": "Piggy Bank",
+    "rarity": "rare",
+    "group": "interest",
+    "cost": 2,
+    "maxStar": 3,
+    "spec": "rules/05_normal_cards.md",
+    "selfEvolving": true,
+    "mergeable": false
+  },
+  {
+    "id": "BUF-E01",
+    "name": "Makeshift Wall",
+    "rarity": "epic",
+    "group": "buff",
+    "cost": 3,
+    "maxStar": 3,
+    "spec": "rules/05_normal_cards.md",
+    "gate": "D-01"
+  },
+  {
+    "id": "DEB-E01",
+    "name": "Horseman of Rust",
+    "rarity": "epic",
+    "group": "debuff",
+    "cost": 3,
+    "maxStar": 3,
+    "spec": "rules/05_normal_cards.md"
+  },
+  {
+    "id": "BUF-L01",
+    "name": "Angel of Mercy's Thesis",
+    "rarity": "legendary",
+    "group": "buff",
+    "cost": 4,
+    "maxStar": 3,
+    "spec": "rules/05_normal_cards.md"
+  },
+  {
+    "id": "DEB-L01",
+    "name": "The Great Corruption",
+    "rarity": "legendary",
+    "group": "debuff",
+    "cost": 4,
+    "maxStar": 3,
+    "spec": "rules/05_normal_cards.md"
+  },
+  {
+    "id": "SPC-01",
+    "name": "Holy Cross",
+    "rarity": "special",
+    "group": "special",
+    "cost": 4,
+    "maxStar": 0,
+    "spec": "rules/06_special_cards.md",
+    "uniquePerBench": true
+  },
+  {
+    "id": "SPC-02",
+    "name": "Powder Keg",
+    "rarity": "special",
+    "group": "special",
+    "cost": 1,
+    "maxStar": 0,
+    "spec": "rules/06_special_cards.md",
+    "uniquePerBench": true,
+    "minRound": 5
+  },
+  {
+    "id": "SPC-03",
+    "name": "Mirror Image",
+    "rarity": "special",
+    "group": "special",
+    "cost": 3,
+    "maxStar": 0,
+    "spec": "rules/06_special_cards.md",
+    "uniquePerBench": true,
+    "minRound": 5,
+    "usedInPrep": true
+  },
+  {
+    "id": "DMN-01",
+    "name": "Malphas",
+    "rarity": "demon",
+    "group": "demon",
+    "cost": 0,
+    "maxStar": 0,
+    "spec": "rules/04_demons.md",
+    "cursedOnBuy": true
+  },
+  {
+    "id": "DMN-02",
+    "name": "Agares",
+    "rarity": "demon",
+    "group": "demon",
+    "cost": 0,
+    "maxStar": 0,
+    "spec": "rules/04_demons.md",
+    "cursedOnBuy": true
+  },
+  {
+    "id": "DMN-03",
+    "name": "Asmodeus",
+    "rarity": "demon",
+    "group": "demon",
+    "cost": 0,
+    "maxStar": 0,
+    "spec": "rules/04_demons.md",
+    "cursedOnBuy": true,
+    "gate": "D-02"
+  },
+  {
+    "id": "DMN-04",
+    "name": "Belial",
+    "rarity": "demon",
+    "group": "demon",
+    "cost": 0,
+    "maxStar": 0,
+    "spec": "rules/04_demons.md",
+    "cursedOnBuy": true
+  },
+  {
+    "id": "DMN-05",
+    "name": "Abaddon",
+    "rarity": "demon",
+    "group": "demon",
+    "cost": 0,
+    "maxStar": 0,
+    "spec": "rules/04_demons.md",
+    "cursedOnBuy": true
+  }
+]

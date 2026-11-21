@@ -1,0 +1,121 @@
+{
+  "_note": "Nguồn sự thật cho SỐ LIỆU. Hiệu ứng chi tiết nằm ở rules/*.md. Mâu thuẫn giữa file này và rules/*.md: dừng và hỏi (P-03).",
+  "board": {
+    "size": 15,
+    "cells": 225,
+    "winLength": 5,
+    "overlineWins": true,
+    "blockedBothEndsWins": true
+  },
+  "seats": [
+    "X",
+    "O"
+  ],
+  "startCoins": {
+    "X": 3,
+    "O": 4
+  },
+  "coinsPerRound": 1,
+  "timersMs": {
+    "prep": 20000,
+    "action": 15000,
+    "popup": 15000,
+    "asmodeusMoveLimit": 7000,
+    "seatHold": 45000,
+    "minPrep": 5000
+  },
+  "asmodeusPrepFactor": 0.5,
+  "belialCancelPrepFactor": 0.5,
+  "belialCancelPrepRounds": 2,
+  "bench": {
+    "slots": 5
+  },
+  "shop": {
+    "slots": 4,
+    "maxBlocked": 3,
+    "maxDemonPerShop": 2
+  },
+  "reroll": {
+    "freePerRound": 1,
+    "freeCap": 3,
+    "paidCost": 1
+  },
+  "demonLocking": {
+    "maxLocked": 2
+  },
+  "rarityUp3DemonBonusPct": 8,
+  "demonPCap": 0.5,
+  "rarityStages": [
+    {
+      "stage": 1,
+      "roundFrom": 1,
+      "roundTo": 4,
+      "common": 65,
+      "rare": 30,
+      "epic": 5,
+      "special": 0,
+      "legendary": 0,
+      "demonP": 0.0
+    },
+    {
+      "stage": 2,
+      "roundFrom": 5,
+      "roundTo": 9,
+      "common": 43,
+      "rare": 33,
+      "epic": 16,
+      "special": 5,
+      "legendary": 3,
+      "demonP": 0.08
+    },
+    {
+      "stage": 3,
+      "roundFrom": 10,
+      "roundTo": 15,
+      "common": 27,
+      "rare": 29,
+      "epic": 23,
+      "special": 12,
+      "legendary": 9,
+      "demonP": 0.16
+    },
+    {
+      "stage": 4,
+      "roundFrom": 16,
+      "roundTo": null,
+      "common": 9,
+      "rare": 14,
+      "epic": 28,
+      "special": 23,
+      "legendary": 26,
+      "demonP": 0.34
+    }
+  ],
+  "demonWeights": {
+    "DMN-01": 35,
+    "DMN-02": 30,
+    "DMN-03": 20,
+    "DMN-04": 10,
+    "DMN-05": 5
+  },
+  "demonRewardOrder": [
+    "DMN-01",
+    "DMN-02",
+    "DMN-03",
+    "DMN-04",
+    "DMN-05"
+  ],
+  "roundEndOrder": [
+    "coin+1",
+    "interest",
+    "buff",
+    "debuff",
+    "demonCheck",
+    "shopRefreshAndReroll"
+  ],
+  "winCheckOrder": [
+    "hellsDealer",
+    "fiveInRow",
+    "fullBoardDraw"
+  ]
+}

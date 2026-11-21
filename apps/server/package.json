@@ -1,0 +1,14 @@
+{
+  "name": "@carocard/server",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch src/index.ts"
+  },
+  "dependencies": {
+    "ws": "^8.0.0"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.0.0"
+  }
+}
