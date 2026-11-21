@@ -6,6 +6,8 @@
     "dev": "node --watch src/index.ts"
   },
   "dependencies": {
+    "@carocard/shared": "workspace:*",
+    "@carocard/game-engine": "workspace:*",
     "ws": "^8.0.0"
   },
   "devDependencies": {

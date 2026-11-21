@@ -60,3 +60,25 @@ button {
 .cell:enabled:hover { background: #385151; }
 .cell:disabled { cursor: default; }
 button:focus-visible { outline: 2px solid white; outline-offset: -2px; }
+
+.room-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .65rem;
+  margin-block: .75rem;
+}
+
+.room-actions input {
+  width: 8ch;
+  padding: .35rem;
+  color: inherit;
+  background: #223031;
+  border: 1px solid #738383;
+  border-radius: .3rem;
+  font: inherit;
+}
+
+.restart[aria-pressed="true"] { border-color: #a7e8c6; color: #a7e8c6; }
+.restart:disabled { cursor: default; opacity: .55; }
+[role="alert"] { color: #ffc09f; }

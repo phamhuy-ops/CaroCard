@@ -48,3 +48,27 @@
 - Trả lời nguyên văn: `[https://github.com/phamhuy-ops/CaroCard.git](https://github.com/phamhuy-ops/CaroCard.git) đây là link hãy commit M1 lên với tiếng việt nha`
 - Quyết định: Dùng lời nhắn tiếng Việt cho commit M1 và đẩy nhánh `main` lên GitHub.
 - File bị ảnh hưởng: `DECISIONS_LOG.md` và cấu hình remote của repo local.
+
+## 2026-11-21 — P-02 (M2)
+
+- Trả lời nguyên văn: A
+- Quyết định: Duyệt kế hoạch M2.
+- File bị ảnh hưởng: DECISIONS_LOG.md. Phần triển khai chờ quyết định D-05.
+
+## 2026-11-21 — D-05 (M2)
+
+- Trả lời nguyên văn: A
+- Quyết định: Hai người chọn hai mặt khác nhau. Chủ phòng tung xu 50/50 trên server. Người đoán đúng nhận X, người kia nhận O. Chủ phòng bắt đầu ván.
+- File bị ảnh hưởng: packages/shared/, apps/server/, apps/web/, pnpm-lock.yaml và DECISIONS_LOG.md.
+
+## 2026-11-21 — A-03 (M2)
+
+- Trả lời nguyên văn: Ok xác nhận đạt nha
+- Quyết định: Nghiệm thu ván thử qua hai tab. Ảnh đính kèm cho thấy hai ghế X/O trong cùng phòng với cùng bàn cờ và kết quả X thắng.
+- File bị ảnh hưởng: DECISIONS_LOG.md.
+
+## 2026-11-21 — P-05 (M2)
+
+- Trả lời nguyên văn: commit lên github tiếng việt
+- Quyết định: Tạo commit M2 với lời nhắn tiếng Việt và đẩy nhánh main lên GitHub.
+- File bị ảnh hưởng: DECISIONS_LOG.md và các tệp triển khai M2.

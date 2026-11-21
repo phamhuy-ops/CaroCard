@@ -1,10 +1,11 @@
 import { createServer } from 'node:http';
 import { healthResponse } from './health.ts';
+import { attachGameSocket } from './socket.ts';
 
 const host = '127.0.0.1';
-const port = 3000;
+const port = Number(process.env.CAROCARD_SERVER_PORT ?? 3000);
 
-createServer((request, response) => {
+const server = createServer((request, response) => {
   if (request.method === 'GET' && request.url === '/health') {
     response.writeHead(200, { 'Content-Type': 'application/json' });
     response.end(JSON.stringify(healthResponse()));
@@ -13,6 +14,9 @@ createServer((request, response) => {
 
   response.writeHead(404);
   response.end();
-}).listen(port, host, () => {
+});
+
+attachGameSocket(server);
+server.listen(port, host, () => {
   console.log(`CaroCard server: http://${host}:${port}`);
 });

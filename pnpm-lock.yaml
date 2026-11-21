@@ -29,6 +29,12 @@ importers:
 
   apps/server:
     dependencies:
+      '@carocard/game-engine':
+        specifier: workspace:*
+        version: link:../../packages/game-engine
+      '@carocard/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       ws:
         specifier: ^8.0.0
         version: 8.23.0
@@ -42,6 +48,9 @@ importers:
       '@carocard/game-engine':
         specifier: workspace:*
         version: link:../../packages/game-engine
+      '@carocard/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       react:
         specifier: ^19.0.0
         version: 19.3.1
