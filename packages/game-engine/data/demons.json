@@ -1,0 +1,9 @@
+{
+  "source": "spec/rules/04_demons.md",
+  "progress": { "DMN-01": 2, "DMN-02": 3, "DMN-03": 3, "DMN-04": 3, "DMN-05": 3 },
+  "malphas": { "cancelCoins": 2, "walls": 2 },
+  "agares": { "cancelCards": 2, "moveMarks": 3, "protectedRun": 4 },
+  "asmodeus": { "cancelCoins": 3, "cancelActionRounds": 2 },
+  "belial": { "maxCoins": 4, "destroyCards": 2 },
+  "abaddon": { "forbiddenRun": 4, "blocks": 2, "removeBuffs": 2 }
+}

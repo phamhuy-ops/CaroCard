@@ -8,6 +8,7 @@
     "./shop": "./src/shop.ts",
     "./normal": "./src/normal.ts",
     "./debuff": "./src/debuff.ts",
-    "./special": "./src/special.ts"
+    "./special": "./src/special.ts",
+    "./demon": "./src/demon.ts"
   }
 }

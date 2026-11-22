@@ -1,5 +1,8 @@
 import { z } from 'zod';
-export { default as gameConstants } from '../../../spec/data/constants.json' with { type: 'json' };
+import constants from '../../../spec/data/constants.json' with { type: 'json' };
+import timers from '../data/timers.json' with { type: 'json' };
+
+export const gameConstants = { ...constants, timersMs: { ...constants.timersMs, ...timers } };
 
 const phase = z.enum(['LOBBY', 'PREPARATION', 'ACTION', 'ROUND_END', 'FINISHED']);
 const face = z.enum(['heads', 'tails']);
@@ -27,6 +30,9 @@ export const commandSchema = z.discriminatedUnion('type', [
     targetSlot: z.int().nonnegative(),
   }),
   z.strictObject({ ...commandFields, type: z.literal('endTurn') }),
+  z.strictObject({ ...commandFields, type: z.literal('cancelDemon'), round: z.int().positive(), slot: z.int().nonnegative() }),
+  z.strictObject({ ...commandFields, type: z.literal('useDemon'), slot: z.int().nonnegative(), walls: z.array(squareSchema).optional() }),
+  z.strictObject({ ...commandFields, type: z.literal('answerBelial'), windowId: z.uuid(), target: squareSchema }),
   z.strictObject({ ...commandFields, type: z.literal('answerUltimatum'), windowId: z.uuid(), choice: z.enum(['accept', 'resist']) }),
   z.strictObject({ ...commandFields, type: z.literal('toggleHold'), round: z.int().positive() }),
   z.strictObject({ ...commandFields, type: z.literal('reroll'), round: z.int().positive() }),
@@ -86,6 +92,8 @@ export const ErrorCode = {
   InvalidMove: 'INVALID_MOVE',
   InvalidWalls: 'INVALID_WALLS',
   InvalidSpecialTarget: 'INVALID_SPECIAL_TARGET',
+  DemonUnavailable: 'DEMON_UNAVAILABLE',
+  BenchLocked: 'BENCH_LOCKED',
 } as const;
 
 export type ErrorCode = typeof ErrorCode[keyof typeof ErrorCode];
@@ -98,13 +106,14 @@ export interface CardView {
 }
 
 export interface PrivateState {
-  shop: { card: CardView | null; blocked: boolean }[];
+  shop: { card: CardView | null; blocked: boolean; demonUnavailable: boolean }[];
   bench: (CardView & {
     star: number;
     canDiscard: boolean;
     canUse: boolean;
     mirrorTarget: boolean;
     piggy?: { noSpendRounds: number; totalEarned: number };
+    demon?: { status: 'Locked' | 'Unlocked' | 'Contracted'; progress: number; goal: number; canCancel: boolean };
   })[];
   hold: boolean;
   freeRerolls: number;
@@ -145,6 +154,7 @@ export interface Snapshot {
   preparation: Record<Seat, Preparation> | null;
   actionDeadline: number | null;
   nextRoundAt: number | null;
+  darkWallsAvailable: number;
   choiceWindow: ChoiceWindow | null;
   ultimatumLocked: boolean;
   ultimatum: {
@@ -158,6 +168,7 @@ export interface Snapshot {
   you: PublicPlayer & {
     privateState: PrivateState; canPlace: boolean; canEndTurn: boolean; canBuy: boolean; wallsRemaining: number;
     hairTrigger: { from: number; through: number } | null;
+    benchLocked: boolean;
   };
 }
 

@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { ClientAction, ClientMessage, Face, Seat, ServerMessage, Snapshot } from '@carocard/shared';
+import timers from '@carocard/shared/timers' with { type: 'json' };
 import { boardSize, newAngleTargets, wallsForStar } from '@carocard/game-engine';
 import type { Square } from '@carocard/game-engine';
+import { demonRules } from '@carocard/game-engine/demon';
 
 const sessionKey = 'carocard.roomSession';
 const faces: Record<Face, string> = { heads: 'Ngửa', tails: 'Sấp' };
@@ -33,11 +35,33 @@ const errors: Record<string, string> = {
   ACTION_USED: 'Bạn đã thực hiện thao tác này trong lượt.',
   STALE_CHOICE: 'Hộp lựa chọn đã đóng hoặc không dành cho bạn.',
   BUY_LOCKED: 'Tối hậu thư đang khóa lượt mua thẻ.',
-  CARD_LOCKED: 'Tối hậu thư đang khóa quyền dùng thẻ.',
+  CARD_LOCKED: 'Bạn đang bị khóa quyền dùng thẻ và phần thưởng Demon.',
   ULTIMATUM_ACTIVE: 'Chờ Tối hậu thư trước hết hiệu lực.',
   INVALID_MOVE: 'Nước dời quân không hợp lệ.',
   INVALID_WALLS: 'Chọn đủ ô trống khác nhau và kiểm tra chỗ đặt tường còn lại.',
   INVALID_SPECIAL_TARGET: 'Mục tiêu của thẻ đặc biệt không hợp lệ.',
+  DEMON_UNAVAILABLE: 'Khế ước chưa đủ điều kiện để dùng hoặc hủy.',
+  BENCH_LOCKED: 'Kho bài đang bị khóa.',
+};
+
+const demonStatus = { Locked: 'Đang chịu nguyền', Unlocked: 'Đã giải nguyền', Contracted: 'Đã ký khế ước' };
+
+const demonText: Record<string, [string, string, string]> = {
+  'DMN-01': ['Không dùng thẻ trong lượt Hành động trong các vòng liên tiếp.',
+    `Dùng trọn một lượt để đặt tối đa ${demonRules.malphas.walls} Dark Wall.`,
+    `Hủy khế ước mất ${demonRules.malphas.cancelCoins} xu.`],
+  'DMN-02': ['Đặt quân vào hàng hoặc cột ngoài cùng.',
+    `Tự động dời tối đa ${demonRules.agares.moveMarks} quân đối thủ ra viền.`,
+    `Hủy khế ước phá ${demonRules.agares.cancelCards} thẻ Normal hoặc Special ngẫu nhiên trong kho.`],
+  'DMN-03': [`Tự đặt dấu trong ${timers.asmodeusMoveLimit / 1000} giây đầu lượt, không dùng thẻ. Thời gian popup không tính.`,
+    'Giảm một nửa thời gian Chuẩn bị của đối thủ đến hết ván.',
+    `Hủy khế ước mất ${demonRules.asmodeus.cancelCoins} xu và khóa dùng thẻ trong ${demonRules.asmodeus.cancelActionRounds} vòng tính từ vòng này.`],
+  'DMN-04': [`Không dùng thẻ và còn tối đa ${demonRules.belial.maxCoins} xu cuối vòng.`,
+    `Phá tối đa ${demonRules.belial.destroyCards} thẻ Normal và chọn ô đặt quân trong lượt kế tiếp của đối thủ.`,
+    'Hủy khế ước làm mất toàn bộ Normal trong kho và giảm thời gian Chuẩn bị ở các vòng kế tiếp.'],
+  'DMN-05': [`Không dùng thẻ, không tiêu xu và không có chuỗi từ ${demonRules.abaddon.forbiddenRun} quân.`,
+    `Khóa vĩnh viễn tối đa ${demonRules.abaddon.blocks} ô Shop và xóa tối đa ${demonRules.abaddon.removeBuffs} Buff đang hoạt động của đối thủ.`,
+    'Hủy khế ước xóa xu ngay và đầu vòng sau, đồng thời khóa kho tới hết vòng sau.'],
 };
 
 const rarityLabels: Record<string, string> = {
@@ -72,12 +96,12 @@ function ShopPanel({ snapshot, disabled, command, onUse }: {
         </div>
       </div>
       <ul className="shop-slots">
-        {shop.map(({ card, blocked }, slot) => (
+        {shop.map(({ card, blocked, demonUnavailable }, slot) => (
           <li className="shop-card" key={slot}>
             {card ? <>
               <strong>{card.name}</strong>
               <span>{rarityLabels[card.rarity]} · {card.cost} xu</span>
-              <button className="restart" disabled={!canTrade || !snapshot.you.canBuy || blocked || card.cost > coins}
+              <button className="restart" disabled={!canTrade || !snapshot.you.canBuy || blocked || demonUnavailable || card.cost > coins}
                 aria-label={blocked ? `Ô ${slot + 1} bị khóa` : `Mua ${card.name} ở ô ${slot + 1}`}
                 onClick={() => command({ type: 'buy', round, slot })}>{blocked ? 'Bị khóa' : 'Mua'}</button>
             </> : <span>{blocked ? 'Ô trống bị khóa' : 'Ô trống'}</span>}
@@ -92,14 +116,22 @@ function ShopPanel({ snapshot, disabled, command, onUse }: {
           {bench.map((card, slot) => (
             <li className="shop-card" key={slot}>
               <strong>{card.name}{card.star > 0 ? ` · ${card.star}★` : ''}</strong>
-              <span>{card.rarity === 'demon' ? 'Demon · Đang khóa' : rarityLabels[card.rarity]}</span>
+              <span>{card.demon ? `${demonStatus[card.demon.status]} · ${card.demon.progress}/${card.demon.goal}`
+                : rarityLabels[card.rarity]}</span>
+              {card.demon && demonText[card.id] && <details>
+                <summary>Lời nguyền và phần thưởng</summary>
+                {demonText[card.id].map(text => <p key={text}>{text}</p>)}
+              </details>}
+              {snapshot.preparation && card.demon?.status === 'Locked' && <button className="restart"
+                disabled={disabled || !card.demon.canCancel}
+                onClick={() => command({ type: 'cancelDemon', round, slot })}>Hủy khế ước</button>}
               {card.piggy && <span>Chuỗi tiết kiệm: {card.piggy.noSpendRounds} · Đã sinh {card.piggy.totalEarned} xu</span>}
               {snapshot.preparation && card.canDiscard && <button className="restart" disabled={!canTrade}
                 aria-label={`${card.piggy ? 'Đập heo' : 'Vứt'} ${card.name} ở ô ${slot + 1}`}
                 onClick={() => command({ type: 'discard', round, slot })}>{card.piggy ? 'Đập heo' : 'Vứt'}</button>}
               {card.canUse && <button className="restart" disabled={disabled}
                 aria-label={`Dùng ${card.name} ở ô ${slot + 1}`}
-                onClick={() => onUse(slot)}>Dùng thẻ</button>}
+                onClick={() => onUse(slot)}>{card.demon ? 'Dùng phần thưởng' : 'Dùng thẻ'}</button>}
               {((['BUF-R01', 'BUF-E01', 'SPC-02'].includes(card.id) && snapshot.phase === 'ACTION' && snapshot.turn === seat)
                 || (card.id === 'SPC-03' && snapshot.phase === 'PREPARATION')) && !card.canUse &&
                 <button className="restart" disabled>Dùng thẻ</button>}
@@ -288,8 +320,9 @@ export function OnlineGame({ renderBoard }: {
       : newAngleTargets(snapshot.board, selecting.seat, selecting.star, { row, col }).length > 0),
   } : undefined;
   const wallCard = wall && snapshot?.round === wall.round ? snapshot.you.privateState.bench[wall.slot] : null;
-  const building = wall && wallCard?.id === 'BUF-E01' && wallCard.canUse
-    ? { ...wall, required: wallsForStar(wallCard.star) } : null;
+  const building = wall && snapshot && wallCard?.canUse && ['BUF-E01', 'DMN-01'].includes(wallCard.id)
+    ? { ...wall, dark: wallCard.id === 'DMN-01',
+      required: wallCard.id === 'DMN-01' ? snapshot.darkWallsAvailable : wallsForStar(wallCard.star) } : null;
   const wallSelection: BoardSelection | undefined = building && snapshot ? {
     selected: (row, col) => building.squares.some(square => square.row === row && square.col === col),
     canSelect: (row, col) => !disabled && snapshot.board[row * boardSize + col] === null
@@ -301,9 +334,16 @@ export function OnlineGame({ renderBoard }: {
     selected: () => false,
     canSelect: (row, col) => !disabled && snapshot.board[row * boardSize + col] === 'Makeshift Wall',
   } : undefined;
+  const forcedWindow = snapshot?.choiceWindow?.kind === 'belial' ? snapshot.choiceWindow : null;
+  const forcedSelection: BoardSelection | undefined = forcedWindow && snapshot ? {
+    selected: () => false,
+    canSelect: (row, col) => !disabled && snapshot.board[row * boardSize + col] === null,
+  } : undefined;
 
   function clickBoard(row: number, col: number) {
-    if (pickingSpecial?.id === 'SPC-02') {
+    if (forcedWindow) {
+      command({ type: 'answerBelial', windowId: forcedWindow.id, target: { row, col } });
+    } else if (pickingSpecial?.id === 'SPC-02') {
       command({ type: 'useCard', slot: pickingSpecial.slot, blast: { row, col } });
       setSpecial(null);
     } else if (building) {
@@ -370,6 +410,7 @@ export function OnlineGame({ renderBoard }: {
             <>
               <p>Vòng {snapshot.round} · X: {snapshot.coins.X} xu · O: {snapshot.coins.O} xu</p>
               {snapshot.nextRoundAt !== null && <p role="status">Vòng {snapshot.round + 1} bắt đầu sau {seconds(snapshot.nextRoundAt)} giây.</p>}
+              {snapshot.you.benchLocked && <p>Kho bài đang bị khóa.</p>}
               {snapshot.lastCard && <p>{snapshot.lastCard.seat} đã dùng {snapshot.lastCard.name}.</p>}
               {hair && <p>{snapshot.round < hair.from
                 ? `Hair-Trigger bắt đầu từ vòng ${hair.from}.`
@@ -413,8 +454,10 @@ export function OnlineGame({ renderBoard }: {
                 setSpecial(null);
                 if (id === 'BUF-R01') {
                   setAngle({ round: snapshot.round, slot, from: null });
-                } else if (id === 'BUF-E01') {
+                } else if (id === 'BUF-E01' || (id === 'DMN-01' && snapshot.darkWallsAvailable > 0)) {
                   setWall({ round: snapshot.round, slot, squares: [] });
+                } else if (id === 'DMN-01' || id === 'DMN-04') {
+                  command({ type: 'useDemon', slot });
                 } else if (id === 'SPC-02' || id === 'SPC-03') {
                   setSpecial({ round: snapshot.round, slot, id });
                 } else {
@@ -443,15 +486,17 @@ export function OnlineGame({ renderBoard }: {
                 <button className="restart" onClick={() => setAngle(null)}>Hủy chọn</button>
               </div>}
               {building && <div className="room-actions">
-                <p role="status">Chọn ô trống để đặt tường · {building.squares.length}/{building.required}</p>
-                <button className="restart" disabled={disabled || building.squares.length !== building.required}
+                <p role="status">{building.dark ? 'Chọn ô trống để đặt Dark Wall' : 'Chọn ô trống để đặt tường'} · {building.squares.length}/{building.required}</p>
+                <button className="restart" disabled={disabled || (building.dark
+                  ? building.squares.length === 0 : building.squares.length !== building.required)}
                   onClick={() => {
-                    command({ type: 'useCard', slot: building.slot, walls: building.squares });
+                    command({ type: building.dark ? 'useDemon' : 'useCard', slot: building.slot, walls: building.squares });
                     setWall(null);
                   }}>Đặt tường</button>
                 <button className="restart" onClick={() => setWall(null)}>Hủy chọn</button>
               </div>}
-              {renderBoard(snapshot.board, !disabled && snapshot.you.canPlace, clickBoard, blastSelection ?? wallSelection ?? boardSelection,
+              {forcedWindow && <p role="status">Belial · Chọn ô trống để đặt dấu {snapshot.turn} của đối thủ.</p>}
+              {renderBoard(snapshot.board, !disabled && snapshot.you.canPlace, clickBoard, forcedSelection ?? blastSelection ?? wallSelection ?? boardSelection,
                 snapshot.result?.kind === 'win' && snapshot.result.reason === 'fiveInRow' ? snapshot.result.winner : undefined)}
             </>
           )}

@@ -1,0 +1,6 @@
+{
+  "prep": 30000,
+  "action": 30000,
+  "asmodeusMoveLimit": 10000,
+  "belial": 15000
+}

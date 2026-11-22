@@ -19,9 +19,30 @@ export interface Game {
   turn: Seat;
   result: Result | null;
   wallOwners: Readonly<Partial<Record<number, Seat>>>;
+  darkWallSources: Readonly<Partial<Record<number, string>>>;
 }
 
 export type Square = { row: number; col: number };
+
+export function isEdge({ row, col }: Square) {
+  return row === 0 || col === 0 || row === size - 1 || col === size - 1;
+}
+
+function ray(board: readonly Cell[], row: number, col: number, dr: number, dc: number, seat: Seat) {
+  let length = 0;
+  while (inBounds(row += dr, col += dc) && board[row * size + col] === seat) length++;
+  return length;
+}
+
+export function hasRunAt(board: readonly Cell[], { row, col }: Square, seat: Seat, length: number) {
+  return board[row * size + col] === seat && directions.some(([dr, dc]) =>
+    1 + ray(board, row, col, dr, dc, seat) + ray(board, row, col, -dr, -dc, seat) >= length);
+}
+
+export function blocksRun(board: readonly Cell[], { row, col }: Square, seat: Seat, length: number) {
+  return directions.some(([dr, dc]) =>
+    ray(board, row, col, dr, dc, seat) >= length || ray(board, row, col, -dr, -dc, seat) >= length);
+}
 
 export function winningLine(board: readonly Cell[], winner: Seat): { from: Square; to: Square } | null {
   for (let index = 0; index < board.length; index++) {
@@ -111,7 +132,7 @@ export function resolvePlacements(
 }
 
 export function createGame(): Game {
-  return { board: Array<Cell>(cells).fill(null), turn: 'X', result: null, wallOwners: {} };
+  return { board: Array<Cell>(cells).fill(null), turn: 'X', result: null, wallOwners: {}, darkWallSources: {} };
 }
 
 export function placeTurn(game: Game, row: number, col: number, keepTurn = false): Game {

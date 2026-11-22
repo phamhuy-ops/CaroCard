@@ -72,6 +72,7 @@ button {
 .cell[data-mark="X"] { color: #a7e8c6; }
 .cell[data-mark="O"] { color: #ffc09f; }
 .cell[data-mark="Makeshift Wall"] { color: #e7c487; background: #384039; }
+.cell[data-mark="Dark Wall"] { color: #d8bcff; background: #362944; }
 .cell:enabled:hover { background: #385151; }
 .cell:disabled { cursor: default; }
 .cell[data-target="true"] { box-shadow: inset 0 0 0 2px #80b69d; }

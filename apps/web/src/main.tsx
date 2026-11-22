@@ -36,7 +36,7 @@ function Board({ board, canPlace, onPlace, selection, winner }: {
             aria-pressed={selection ? selection.selected(row, col) : undefined}
             disabled={!enabled}
             onClick={() => onPlace(row, col)}>
-            {cell === 'Makeshift Wall' ? '▦' : cell}
+            {cell === 'Makeshift Wall' ? '▦' : cell === 'Dark Wall' ? '◆' : cell}
           </button>
         );
       })}

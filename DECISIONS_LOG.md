@@ -198,3 +198,39 @@
 - Trả lời nguyên văn: Ok đẩy lên git giúp t bản M6
 - Quyết định: Tạo commit M6 bằng tiếng Việt và đẩy nhánh main lên GitHub.
 - File bị ảnh hưởng: DECISIONS_LOG.md và các tệp triển khai M6.
+
+## 2026-11-22 — P-02 (M7)
+
+- Trả lời nguyên văn: A
+- Quyết định: Duyệt M7. Triển khai Malphas, Agares, Abaddon và Belial trước D-02; chờ quyết định về Asmodeus.
+- File bị ảnh hưởng: packages/game-engine/, packages/shared/, apps/server/, apps/web/ và DECISIONS_LOG.md.
+
+## 2026-11-22 — D-02 (M7)
+
+- Trả lời nguyên văn: A
+- Quyết định: Dùng ngưỡng Asmodeus 7 giây theo thời điểm server nhận lệnh. Tính cả đúng mốc, loại trừ thời gian popup, không bù RTT.
+- File bị ảnh hưởng: packages/game-engine/, apps/server/, apps/web/ và DECISIONS_LOG.md.
+
+## 2026-11-22 — Điều chỉnh thời gian M7
+
+- Trả lời nguyên văn: tăng lên cho 30s chuẩn bị và 30s lượt nha (vì 20s chuẩn bị và 15s đặt sẽ khá căng thời gian cho người mới)
+- Quyết định: Chuẩn bị và lượt Hành động thường mặc định 30 giây. Giữ ngưỡng Asmodeus 7 giây, cửa sổ Belial và Ultimatum 15 giây, giữ ghế 45 giây.
+- File bị ảnh hưởng: packages/shared/data/timers.json, packages/shared/src/protocol.ts, apps/server/src/room.ts, apps/server/src/normal.test.ts và DECISIONS_LOG.md.
+
+## 2026-11-22 — Điều chỉnh ngưỡng Asmodeus (M7)
+
+- Trả lời nguyên văn: **Asmodeus:** tăng lên cho 10s để đặt thay vì 7s nha
+- Quyết định: Ngưỡng Asmodeus là 10 giây, tính cả đúng mốc theo thời điểm server nhận lệnh và loại trừ thời gian popup.
+- File bị ảnh hưởng: packages/shared/data/timers.json, apps/web/src/online.tsx, apps/server/src/normal.test.ts và DECISIONS_LOG.md.
+
+## 2026-11-22 — Nghiệm thu M7
+
+- Trả lời nguyên văn: Ok tiếp tục
+- Quyết định: Xác nhận tiếp tục sau M7 với thời gian Chuẩn bị và Hành động thường 30 giây, ngưỡng Asmodeus 10 giây.
+- File bị ảnh hưởng: DECISIONS_LOG.md.
+
+## 2026-11-22 — P-05 (M7)
+
+- Trả lời nguyên văn: đẩy m7 lên git và chọn A cho m8
+- Quyết định: Tạo commit M7 bằng tiếng Việt và đẩy nhánh main lên GitHub.
+- File bị ảnh hưởng: DECISIONS_LOG.md và các tệp triển khai M7.

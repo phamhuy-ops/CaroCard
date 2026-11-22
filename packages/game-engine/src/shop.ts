@@ -14,6 +14,12 @@ export interface BenchCard {
   cardId: string;
   star: number;
   piggy?: { purchasedRound: number; noSpendRounds: number; totalEarned: number };
+  demon?: {
+    status: 'Locked' | 'Unlocked' | 'Contracted';
+    progress: number;
+    failed: boolean;
+    sourceId: string;
+  };
 }
 
 export interface Shop {
@@ -27,6 +33,11 @@ export interface Shop {
 
 export function ownsPiggyBank(shop: Shop) {
   return shop.bench.some(card => card.cardId === piggyBankId);
+}
+
+export function lockedDemonCount(shop: Shop) {
+  return shop.bench.filter(item => cardDefinition(item.cardId).rarity === 'demon'
+    && (item.demon?.status ?? 'Locked') === 'Locked').length;
 }
 
 export function hideOwnedPiggyBank(shop: Shop): Shop {
@@ -196,7 +207,7 @@ export function mergeBench(bench: readonly BenchCard[], cardId: string): BenchCa
   return result;
 }
 
-export function buy(shop: Shop, coins: number, index: number, round = 1): Transaction {
+export function buy(shop: Shop, coins: number, index: number, round = 1, sourceId?: string): Transaction {
   const id = shop.slots[index];
   if (!id) return { error: 'EMPTY_SLOT' };
   if (shop.blocks[index] !== null) return { error: 'SLOT_BLOCKED' };
@@ -205,12 +216,11 @@ export function buy(shop: Shop, coins: number, index: number, round = 1): Transa
   if ((card.uniquePerBench || demon || id === piggyBankId) && shop.bench.some(item => item.cardId === id)) {
     return { error: 'CARD_ALREADY_OWNED' };
   }
-  // Demon progression is introduced in M7. Every purchased Demon starts Locked.
-  if (demon && shop.bench.filter(item => cardDefinition(item.cardId).rarity === 'demon').length
-    >= constants.demonLocking.maxLocked) return { error: 'DEMON_LIMIT' };
+  if (demon && lockedDemonCount(shop) >= constants.demonLocking.maxLocked) return { error: 'DEMON_LIMIT' };
   if (coins < card.cost) return { error: 'NOT_ENOUGH_COINS' };
 
   const item: BenchCard = { cardId: id, star: card.maxStar > 0 ? 1 : 0 };
+  if (demon) item.demon = { status: 'Locked', progress: 0, failed: false, sourceId: sourceId ?? id };
   if (card.selfEvolving) item.piggy = { purchasedRound: round, noSpendRounds: 0, totalEarned: 0 };
   const bench = mergeBench([...shop.bench, item], id);
   if (bench.length > benchRules.slots) return { error: 'BENCH_FULL' };

@@ -258,3 +258,131 @@ test('Powder Keg validates its target and Hair-Trigger permits marking the opene
   expect(send(x, { type: 'place', row: 1, col: 1 }).error).toBeUndefined();
   expect(room.snapshot(o)).toMatchObject({ phase: 'ACTION', turn: 'O' });
 });
+
+test('Malphas unlocks privately after two full turns and using it consumes the entire next turn', () => {
+  const { room, x, o, send, ready } = setup();
+  x.shop.slots[0] = 'DMN-01';
+  expect(send(x, { type: 'buy', round: 1, slot: 0 }).error).toBeUndefined();
+  for (let round = 1; round <= 2; round++) {
+    ready();
+    send(x, { type: 'place', row: 0, col: round });
+    expect(room.snapshot(x).you.privateState.bench[0].demon?.progress).toBe(round);
+    expect(JSON.stringify(room.snapshot(o))).not.toContain('DMN-01');
+    send(o, { type: 'place', row: 1, col: round });
+  }
+  x.effects.hair = { star: 1, from: 3, through: 3 };
+  ready();
+  expect(send(x, { type: 'useDemon', slot: 0, walls: [{ row: 2, col: 2 }] }).error).toBeUndefined();
+  expect(room.snapshot(x)).toMatchObject({ turn: 'O', you: { privateState: { bench: [{ demon: { status: 'Contracted' } }] } } });
+  expect(room.snapshot(o).board[2 * 15 + 2]).toBe('Dark Wall');
+});
+
+test.each([true, false])('Belial consumes the caster turn and places the opposing mark, timeout: %s', timeout => {
+  const { room, x, o, send, ready } = setup();
+  x.shop.bench = [{ cardId: 'DMN-04', star: 0, demon: { sourceId: 'belial', status: 'Unlocked', progress: 3, failed: false } }];
+  o.shop.bench = [
+    { cardId: 'BUF-C01', star: 1 }, { cardId: 'INT-R01', star: 1 }, { cardId: 'SPC-01', star: 0 },
+    { cardId: 'DMN-03', star: 0, demon: { sourceId: 'asmodeus', status: 'Locked', progress: 2, failed: false } },
+  ];
+  ready();
+  expect(send(x, { type: 'useDemon', slot: 0 }).error).toBeUndefined();
+  const window = room.snapshot(x).choiceWindow!;
+  expect(window.kind).toBe('belial');
+  expect(window.deadline).toBe(15_000);
+  expect(room.snapshot(o).choiceWindow).toBeNull();
+  expect(room.snapshot(o).you.privateState.bench.map(card => card.id)).toEqual(['SPC-01', 'DMN-03']);
+  const command = { type: 'answerBelial', windowId: window.id, target: { row: 0, col: 0 } } as const;
+  expect(send(o, command).error).toBe('STALE_CHOICE');
+  if (timeout) {
+    room.setOnline(x, false, 1);
+    room.advance(window.deadline + 1);
+  } else expect(send(x, command, 'ACTION', window.deadline).error).toBeUndefined();
+  expect(room.snapshot(o).board[0]).toBe('O');
+  expect(o.shop.bench[1].demon).toMatchObject({ status: 'Locked', progress: 0 });
+  expect(room.snapshot(o)).toMatchObject({ round: 2, phase: 'PREPARATION' });
+});
+
+test('Abaddon ignores spending before purchase, resets after paid reroll, and locks the Bench upon cancellation', () => {
+  const { room, x, o, send, ready } = setup();
+  x.shop.slots = ['BUF-C01', 'DMN-05', null, null];
+  expect(send(x, { type: 'buy', round: 1, slot: 0 }).error).toBeUndefined();
+  expect(send(x, { type: 'buy', round: 1, slot: 1 }).error).toBeUndefined();
+  ready();
+  send(x, { type: 'place', row: 0, col: 0 });
+  send(o, { type: 'place', row: 1, col: 0 });
+  expect(x.shop.bench[1].demon?.progress).toBe(1);
+  x.shop.freeRerolls = 0;
+  send(x, { type: 'reroll', round: 2 });
+  expect(x.shop.bench[1].demon?.progress).toBe(0);
+  expect(send(x, { type: 'cancelDemon', round: 2, slot: 1 }).error).toBeUndefined();
+  expect(room.snapshot(x)).toMatchObject({ coins: { X: 0 }, you: { benchLocked: true } });
+  expect(send(x, { type: 'discard', round: 2, slot: 0 }).error).toBe('BENCH_LOCKED');
+  ready();
+  send(x, { type: 'place', row: 0, col: 2 });
+  send(o, { type: 'place', row: 1, col: 2 });
+  expect(room.snapshot(x)).toMatchObject({ round: 3, coins: { X: 0 }, you: { benchLocked: true } });
+});
+
+test.each([0, 1])('Asmodeus accepts exactly ten seconds excluding a popup, extra ms: %i', extra => {
+  const { room, x, o, send, ready } = setup();
+  x.shop.slots[0] = 'DMN-03';
+  send(x, { type: 'buy', round: 1, slot: 0 });
+  x.shop.bench[0].demon!.progress = 2;
+  ready();
+  const choice = room.openChoice('O', 'ultimatum', 1000);
+  expect(room.closeChoice(choice.id, 5000)).toBe(true);
+  const at = 4000 + 10_000 + extra;
+  expect(send(x, { type: 'place', row: 0, col: 0 }, 'ACTION', at).error).toBeUndefined();
+  expect(room.snapshot(x).you.privateState.bench[0].demon).toMatchObject(
+    extra ? { status: 'Locked', progress: 0 } : { status: 'Contracted', progress: 3 });
+  send(o, { type: 'place', row: 1, col: 0 }, 'ACTION', at + 1);
+  expect(room.snapshot(o).preparation?.O.deadline).toBe(at + 1 + (extra ? 30_000 : 15_000));
+});
+
+test('Asmodeus does not count a Hair-Trigger turn with a card, or a turn played by timeout', () => {
+  const { room, x, o, send, ready } = setup();
+  x.shop.slots[0] = 'DMN-03';
+  send(x, { type: 'buy', round: 1, slot: 0 });
+  x.shop.bench[0].demon!.progress = 2;
+  x.shop.bench.push({ cardId: 'INT-C01', star: 1 });
+  x.effects.hair = { star: 1, from: 1, through: 1 };
+  ready();
+  send(x, { type: 'place', row: 0, col: 0 }, 'ACTION', 100);
+  send(x, { type: 'useCard', slot: 1 }, 'ACTION', 200);
+  expect(x.shop.bench[0].demon).toMatchObject({ status: 'Locked', progress: 0 });
+  send(o, { type: 'place', row: 1, col: 0 }, 'ACTION', 300);
+  x.shop.bench[0].demon!.progress = 2;
+  send(x, { type: 'ready' }, 'PREPARATION', 301);
+  send(o, { type: 'ready' }, 'PREPARATION', 301);
+  room.advance(302 + gameConstants.timersMs.action);
+  expect(x.shop.bench[0].demon).toMatchObject({ status: 'Locked', progress: 0 });
+});
+
+test('canceling Asmodeus costs three coins and blocks cards in this and the next ACTION', () => {
+  const { room, x, o, send, ready } = setup();
+  x.shop.slots[0] = 'DMN-03';
+  send(x, { type: 'buy', round: 1, slot: 0 });
+  x.shop.bench.push({ cardId: 'INT-C01', star: 1 });
+  expect(send(x, { type: 'cancelDemon', round: 1, slot: 0 }).error).toBeUndefined();
+  expect(room.snapshot(x).coins.X).toBe(0);
+  for (let round = 1; round <= 2; round++) {
+    ready();
+    expect(send(x, { type: 'useCard', slot: 0 }).error).toBe('CARD_LOCKED');
+    send(x, { type: 'place', row: 0, col: round });
+    send(o, { type: 'place', row: 1, col: round });
+  }
+  ready();
+  expect(send(x, { type: 'useCard', slot: 0 }).error).toBeUndefined();
+});
+
+test('Asmodeus and the Belial cancellation apply both reductions to the base preparation duration', () => {
+  const { room, x, o, send, ready } = setup();
+  x.shop.bench = [{ cardId: 'DMN-03', star: 0, demon: { status: 'Contracted', progress: 3, failed: false, sourceId: 'a' } }];
+  o.shop.slots[0] = 'DMN-04';
+  send(o, { type: 'buy', round: 1, slot: 0 });
+  expect(send(o, { type: 'cancelDemon', round: 1, slot: 0 }).error).toBeUndefined();
+  ready();
+  send(x, { type: 'place', row: 0, col: 0 });
+  send(o, { type: 'place', row: 1, col: 0 });
+  expect(room.snapshot(o).preparation?.O.deadline).toBe(7500);
+});
