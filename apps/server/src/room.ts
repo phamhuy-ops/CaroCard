@@ -6,6 +6,8 @@ import { advanceInterest, buy, canDiscard, cardDefinition, createShop, discard, 
 import type { Shop } from '@carocard/game-engine/shop';
 import { activateNormal, canPairWithMark, canUseNormal, createNormalEffects, timedEffectActive } from '@carocard/game-engine/normal';
 import type { NormalEffects } from '@carocard/game-engine/normal';
+import { applyDebuff, applyUltimatum, canResistUltimatum, endDebuffRound, hasDebuff, startDebuffRound, ultimatumView } from '@carocard/game-engine/debuff';
+import type { UltimatumChoice } from '@carocard/game-engine/debuff';
 import { ErrorCode, gameConstants } from '@carocard/shared';
 import type { ChoiceWindow, Command, CommandResult, Face, Phase, Preparation, PrivateState, Seat, Snapshot } from '@carocard/shared';
 
@@ -52,6 +54,7 @@ export class Room {
   private preparation: Record<Seat, Preparation> | null = null;
   private actionDeadline: number | null = null;
   private choiceWindow: ChoiceWindow | null = null;
+  private pendingUltimatum: { star: number; keepTurn: boolean } | null = null;
   private round = 0;
   private coins = { ...startCoins };
   private connectionResult: Snapshot['result'] = null;
@@ -154,7 +157,12 @@ export class Room {
           }
         }
       } else if (this.choiceWindow?.deadline === deadline) {
-        this.closeChoice(this.choiceWindow.id, deadline);
+        if (this.pendingUltimatum) {
+          const target = this.players.find(player => player.seat === this.choiceWindow?.seat);
+          if (!target?.seat) throw new Error('Ultimatum target missing');
+          const choice = canResistUltimatum(this.pendingUltimatum.star, this.coins[target.seat]) ? 'resist' : 'accept';
+          this.resolveUltimatum(target, target.seat, choice, deadline);
+        } else this.closeChoice(this.choiceWindow.id, deadline);
       } else if (this.actionDeadline === deadline) {
         if (this.placed || this.usedCard) {
           this.endAction(deadline);
@@ -183,6 +191,7 @@ export class Room {
     this.preparation = null;
     this.actionDeadline = null;
     this.choiceWindow = null;
+    this.pendingUltimatum = null;
   }
 
   private beginPreparation(at: number) {
@@ -234,6 +243,10 @@ export class Room {
               this.coins[seat] += interest.coins;
             }
           }
+          if (step === 'debuff') {
+            const player = this.players.find(player => player.seat === seat);
+            if (player) this.updateCombatant(player, seat, endDebuffRound(this.combatant(player, seat), this.round));
+          }
           this.roundEndStep?.(step, seat);
           if (step === 'shopRefreshAndReroll') this.refreshSeatShop(seat, this.round + 1);
         }
@@ -246,7 +259,35 @@ export class Room {
 
   private refreshSeatShop(seat: Seat, round: number) {
     const player = this.players.find(player => player.seat === seat);
-    if (player) player.shop = refreshShop(player.shop, round, this.shopRng[seat], this.rarityStar(player, round));
+    if (!player) return;
+    this.updateCombatant(player, seat, startDebuffRound(this.combatant(player, seat), round, this.rng));
+    player.shop = refreshShop(player.shop, round, this.shopRng[seat], this.rarityStar(player, round),
+      !hasDebuff(player.effects, 'noSystemReroll', round));
+  }
+
+  private combatant(player: Player, seat: Seat) {
+    return { shop: player.shop, effects: player.effects, coins: this.coins[seat] };
+  }
+
+  private get ultimatumLocked() {
+    return this.pendingUltimatum !== null || this.players.some(player =>
+      player.effects.debuffs.some(effect => effect.rule === 'ultimatum' && effect.through >= this.round));
+  }
+
+  private updateCombatant(player: Player, seat: Seat, value: ReturnType<Room['combatant']>) {
+    player.shop = value.shop;
+    player.effects = value.effects;
+    this.coins[seat] = value.coins;
+  }
+
+  private resolveUltimatum(target: Player, seat: Seat, choice: UltimatumChoice, at: number) {
+    const window = this.choiceWindow;
+    const pending = this.pendingUltimatum;
+    if (!window || !pending || !this.closeChoice(window.id, at)) return;
+    this.pendingUltimatum = null;
+    const next = applyUltimatum(this.combatant(target, seat), pending.star, choice, this.round, window.id, this.rng);
+    this.updateCombatant(target, seat, next);
+    if (!pending.keepTurn) this.endAction(at);
   }
 
   private rarityStar(player: Player, round: number) {
@@ -279,6 +320,8 @@ export class Room {
     const { curseProgress, transactions } = player.privateState;
     const { slots, bench, blocks, hold, freeRerolls } = player.shop;
     const ownAction = this.phase === 'ACTION' && !this.choiceWindow && player.seat === this.game.turn;
+    const canUseCard = ownAction && !this.usedCard && !hasDebuff(player.effects, 'cardLock', this.round);
+    const ownWindow = this.choiceWindow && this.choiceWindow.seat === player.seat ? { ...this.choiceWindow } : null;
     return {
       roomCode: this.code,
       phase: this.phase,
@@ -291,7 +334,10 @@ export class Room {
       coins: { ...this.coins },
       preparation: this.preparation && { X: { ...this.preparation.X }, O: { ...this.preparation.O } },
       actionDeadline: this.actionDeadline,
-      choiceWindow: this.choiceWindow && this.choiceWindow.seat === player.seat ? { ...this.choiceWindow } : null,
+      choiceWindow: ownWindow,
+      ultimatumLocked: this.ultimatumLocked,
+      ultimatum: ownWindow && this.pendingUltimatum && player.seat
+        ? ultimatumView(this.pendingUltimatum.star, this.coins[player.seat]) : null,
       lastCard: this.lastCard,
       turn: this.phase === 'ACTION' ? this.game.turn : null,
       result: this.game.result ?? this.connectionResult,
@@ -299,11 +345,13 @@ export class Room {
         ...publicPlayer(player),
         canPlace: ownAction && !this.placed,
         canEndTurn: ownAction && (this.placed || this.usedCard),
+        canBuy: !hasDebuff(player.effects, 'buyLock', this.round),
         privateState: {
           shop: slots.map((id, index) => ({ card: id === null ? null : cardView(id), blocked: blocks[index] !== null })),
           bench: bench.map(({ cardId, star, piggy }) => ({
             ...cardView(cardId), star, canDiscard: canDiscard(cardId),
-            canUse: ownAction && !this.usedCard && canUseNormal(cardId) && (!this.placed || canPairWithMark(cardId)),
+            canUse: canUseCard && canUseNormal(cardId) && (!this.placed || canPairWithMark(cardId))
+              && (cardId !== 'DEB-R01' || !this.ultimatumLocked),
             piggy: piggy && { noSpendRounds: piggy.noSpendRounds, totalEarned: piggy.totalEarned },
           })),
           hold, freeRerolls, curseProgress: { ...curseProgress }, transactions: [...transactions],
@@ -325,10 +373,20 @@ export class Room {
 
   private apply(player: Player, command: Command, at: number): ErrorCode | undefined {
     if (command.expectedPhase !== this.phase) return ErrorCode.WrongPhase;
+    if (command.type === 'answerUltimatum') {
+      if (!player.seat || !this.pendingUltimatum || this.choiceWindow?.seat !== player.seat
+        || this.choiceWindow.id !== command.windowId) return ErrorCode.StaleChoice;
+      if (command.choice === 'resist' && !canResistUltimatum(this.pendingUltimatum.star, this.coins[player.seat])) {
+        return ErrorCode.NotEnoughCoins;
+      }
+      this.resolveUltimatum(player, player.seat, command.choice, at);
+      return;
+    }
     if ('round' in command) {
       const seat = player.seat;
       if (!this.preparation || !seat || command.round !== this.round) return ErrorCode.WrongPhase;
       if (this.preparation[seat].ready) return ErrorCode.AlreadyReady;
+      if (command.type === 'buy' && hasDebuff(player.effects, 'buyLock', this.round)) return ErrorCode.BuyLocked;
       if (command.type === 'toggleHold') {
         player.shop = { ...player.shop, hold: !player.shop.hold };
         return;
@@ -365,15 +423,36 @@ export class Room {
         return;
       }
       if (this.usedCard) return ErrorCode.ActionUsed;
+      if (hasDebuff(player.effects, 'cardLock', this.round)) return ErrorCode.CardLocked;
       const card = player.shop.bench[command.slot];
       if (!card) return ErrorCode.EmptySlot;
+      if (card.cardId === 'DEB-R01' && this.ultimatumLocked) return ErrorCode.UltimatumActive;
       if (!canUseNormal(card.cardId) || (this.placed && !canPairWithMark(card.cardId))) return ErrorCode.CannotUseCard;
-      const effect = activateNormal(card, player.shop, player.effects, this.round, this.rng);
-      player.shop = { ...effect.shop, bench: effect.shop.bench.filter((_, index) => index !== command.slot) };
-      player.effects = effect.effects;
-      this.coins[seat] += effect.coins;
-      this.lastCard = { seat, name: cardDefinition(card.cardId).name };
-      if (hairActive && !this.placed && canPairWithMark(card.cardId)) this.usedCard = true;
+      const definition = cardDefinition(card.cardId);
+      const keepTurn = hairActive && !this.placed && canPairWithMark(card.cardId);
+      player.shop = { ...player.shop, bench: player.shop.bench.filter((_, index) => index !== command.slot) };
+      this.lastCard = { seat, name: definition.name };
+      if (definition.group === 'debuff') {
+        const otherSeat = seat === 'X' ? 'O' : 'X';
+        const opponent = this.players.find(other => other.seat === otherSeat);
+        if (!opponent) throw new Error('Opponent missing');
+        if (!opponent.effects.angelImmune && card.cardId === 'DEB-R01') {
+          this.openChoice(otherSeat, 'ultimatum', at);
+          this.pendingUltimatum = { star: card.star, keepTurn };
+          this.usedCard = true;
+          return;
+        }
+        if (card.cardId !== 'DEB-R01') {
+          const result = applyDebuff(card, this.combatant(player, seat), this.combatant(opponent, otherSeat),
+            this.round, command.commandId, this.rng);
+          this.updateCombatant(player, seat, result.attacker);
+          this.updateCombatant(opponent, otherSeat, result.target);
+        }
+      } else {
+        const effect = activateNormal(card, player.shop, player.effects, this.round, this.rng);
+        this.updateCombatant(player, seat, { ...effect, coins: this.coins[seat] + effect.coins });
+      }
+      if (keepTurn) this.usedCard = true;
       else this.endAction(at);
       return;
     }

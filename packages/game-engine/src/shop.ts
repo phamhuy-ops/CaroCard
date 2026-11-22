@@ -119,8 +119,9 @@ export function grantRerolls(shop: Shop, amount: number): Shop {
   return { ...shop, freeRerolls: Math.min(rerollRules.freeCap, shop.freeRerolls + amount) };
 }
 
-export function refreshShop(shop: Shop, round: number, rng: Rng, rarityStar = 0): Shop {
-  const next = grantRerolls(shop, rerollRules.freePerRound + (rules.rarityUp.freeRerolls[rarityStar - 1] ?? 0));
+export function refreshShop(shop: Shop, round: number, rng: Rng, rarityStar = 0, grantSystemReroll = true): Shop {
+  const next = grantRerolls(shop, (grantSystemReroll ? rerollRules.freePerRound : 0)
+    + (rules.rarityUp.freeRerolls[rarityStar - 1] ?? 0));
   if (!shop.hold) return { ...next, slots: rollShop(round, rng, rarityStar).map(card => card.id) };
 
   const expired: number[] = [];

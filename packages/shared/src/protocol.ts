@@ -16,6 +16,7 @@ export const commandSchema = z.discriminatedUnion('type', [
   z.strictObject({ ...commandFields, type: z.literal('ready') }),
   z.strictObject({ ...commandFields, type: z.literal('useCard'), slot: z.int().nonnegative() }),
   z.strictObject({ ...commandFields, type: z.literal('endTurn') }),
+  z.strictObject({ ...commandFields, type: z.literal('answerUltimatum'), windowId: z.uuid(), choice: z.enum(['accept', 'resist']) }),
   z.strictObject({ ...commandFields, type: z.literal('toggleHold'), round: z.int().positive() }),
   z.strictObject({ ...commandFields, type: z.literal('reroll'), round: z.int().positive() }),
   z.strictObject({ ...commandFields, type: z.literal('buy'), round: z.int().positive(), slot: z.int().nonnegative() }),
@@ -67,6 +68,10 @@ export const ErrorCode = {
   CannotDiscard: 'CANNOT_DISCARD',
   CannotUseCard: 'CANNOT_USE_CARD',
   ActionUsed: 'ACTION_USED',
+  StaleChoice: 'STALE_CHOICE',
+  BuyLocked: 'BUY_LOCKED',
+  CardLocked: 'CARD_LOCKED',
+  UltimatumActive: 'ULTIMATUM_ACTIVE',
 } as const;
 
 export type ErrorCode = typeof ErrorCode[keyof typeof ErrorCode];
@@ -125,11 +130,16 @@ export interface Snapshot {
   preparation: Record<Seat, Preparation> | null;
   actionDeadline: number | null;
   choiceWindow: ChoiceWindow | null;
+  ultimatumLocked: boolean;
+  ultimatum: {
+    star: number; canResist: boolean; blocks: number; coinThreshold: number;
+    coinPenalty: number; destroy: number; lockedRounds: number;
+  } | null;
   lastCard: { seat: Seat; name: string } | null;
   turn: Seat | null;
   result: { kind: 'win'; winner: Seat; reason: 'hellsDealer' | 'fiveInRow' | 'disconnect' }
     | { kind: 'draw' | 'cancelled' } | null;
-  you: PublicPlayer & { privateState: PrivateState; canPlace: boolean; canEndTurn: boolean };
+  you: PublicPlayer & { privateState: PrivateState; canPlace: boolean; canEndTurn: boolean; canBuy: boolean };
 }
 
 export interface CommandResult {

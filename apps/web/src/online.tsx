@@ -29,6 +29,10 @@ const errors: Record<string, string> = {
   CANNOT_DISCARD: 'Thẻ này không thể vứt từ kho.',
   CANNOT_USE_CARD: 'Không thể dùng thẻ này lúc này.',
   ACTION_USED: 'Bạn đã thực hiện thao tác này trong lượt.',
+  STALE_CHOICE: 'Hộp lựa chọn đã đóng hoặc không dành cho bạn.',
+  BUY_LOCKED: 'Tối hậu thư đang khóa lượt mua thẻ.',
+  CARD_LOCKED: 'Tối hậu thư đang khóa quyền dùng thẻ.',
+  ULTIMATUM_ACTIVE: 'Chờ Tối hậu thư trước hết hiệu lực.',
 };
 
 const rarityLabels: Record<string, string> = {
@@ -67,13 +71,14 @@ function ShopPanel({ snapshot, disabled, command }: {
             {card ? <>
               <strong>{card.name}</strong>
               <span>{rarityLabels[card.rarity]} · {card.cost} xu</span>
-              <button className="restart" disabled={!canTrade || blocked || card.cost > coins}
+              <button className="restart" disabled={!canTrade || !snapshot.you.canBuy || blocked || card.cost > coins}
                 aria-label={blocked ? `Ô ${slot + 1} bị khóa` : `Mua ${card.name} ở ô ${slot + 1}`}
                 onClick={() => command({ type: 'buy', round, slot })}>{blocked ? 'Bị khóa' : 'Mua'}</button>
             </> : <span>{blocked ? 'Ô trống bị khóa' : 'Ô trống'}</span>}
           </li>
         ))}
       </ul>
+      {!snapshot.you.canBuy && <p>Tối hậu thư khóa mua thẻ trong vòng này.</p>}
       </>}
       <h2>Kho bài</h2>
       {bench.length === 0 ? <p>Kho trống</p> : (
@@ -89,11 +94,44 @@ function ShopPanel({ snapshot, disabled, command }: {
               {card.canUse && <button className="restart" disabled={disabled}
                 aria-label={`Dùng ${card.name} ở ô ${slot + 1}`}
                 onClick={() => command({ type: 'useCard', slot })}>Dùng thẻ</button>}
+              {card.id === 'DEB-R01' && snapshot.ultimatumLocked &&
+                <span>Chờ Tối hậu thư trước hết hiệu lực.</span>}
             </li>
           ))}
         </ul>
       )}
     </section>
+  );
+}
+
+function UltimatumDialog({ details, seconds, disabled, answer }: {
+  details: NonNullable<Snapshot['ultimatum']>;
+  seconds: number;
+  disabled: boolean;
+  answer: (choice: 'accept' | 'resist') => void;
+}) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => { dialog.current?.showModal(); }, []);
+  const { star, canResist, blocks, coinThreshold, coinPenalty, destroy, lockedRounds } = details;
+  const accept = star === 1 ? 'Không mua thẻ trong vòng sau.'
+    : star === 2 ? `Cuối vòng sau, mất ${coinPenalty} xu nếu còn từ ${coinThreshold} xu trở lên.`
+      : `Không dùng thẻ trong ${lockedRounds} vòng tiếp theo.`;
+  const resist = star === 1 ? `Vòng sau bị khóa ${blocks} ô Shop và mất lượt Reroll miễn phí của hệ thống.`
+    : star === 2 ? `Trừ ngay ${coinPenalty} xu.`
+      : `Phá ngẫu nhiên tối đa ${destroy} thẻ thường trong kho.`;
+  return (
+    <dialog ref={dialog} className="ultimatum" aria-labelledby="ultimatum-title"
+      onCancel={event => event.preventDefault()}>
+      <h2 id="ultimatum-title">Brutal Ultimatum · {star}★</h2>
+      <p>Còn {seconds} giây</p>
+      <p><strong>Chấp nhận</strong> · {accept}</p>
+      <p><strong>Chống lại</strong> · {resist}</p>
+      {!canResist && <p>Bạn chưa đủ xu để chống lại.</p>}
+      <div className="room-actions">
+        <button className="restart" disabled={disabled} onClick={() => answer('accept')}>Chấp nhận</button>
+        <button className="restart" disabled={disabled || !canResist} onClick={() => answer('resist')}>Chống lại</button>
+      </div>
+    </dialog>
   );
 }
 
@@ -284,6 +322,13 @@ export function OnlineGame({ renderBoard }: {
               {snapshot.phase === 'ACTION' && <p>Lượt của {snapshot.turn}{snapshot.actionDeadline !== null
                 ? ` · ${seconds(snapshot.actionDeadline)} giây`
                 : snapshot.choiceWindow ? ` · Còn ${seconds(snapshot.choiceWindow.deadline)} giây để chọn` : ' · Đang chờ lựa chọn'}</p>}
+              {snapshot.choiceWindow && snapshot.ultimatum && (
+                <UltimatumDialog key={snapshot.choiceWindow.id} details={snapshot.ultimatum}
+                  seconds={seconds(snapshot.choiceWindow.deadline)} disabled={disabled}
+                  answer={choice => {
+                    if (snapshot.choiceWindow) command({ type: 'answerUltimatum', windowId: snapshot.choiceWindow.id, choice });
+                  }} />
+              )}
               {snapshot.you.canEndTurn && <div className="room-actions">
                 <button className="restart" disabled={disabled}
                   onClick={() => command({ type: 'endTurn' })}>Kết thúc lượt</button>

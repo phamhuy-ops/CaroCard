@@ -137,3 +137,27 @@
 - Trả lời nguyên văn: push lên git
 - Quyết định: Tạo commit M5a bằng tiếng Việt và đẩy nhánh main lên GitHub.
 - File bị ảnh hưởng: DECISIONS_LOG.md và các tệp triển khai M5a.
+
+## 2026-11-22 — P-02 (M5b)
+
+- Trả lời nguyên văn: A
+- Quyết định: Duyệt kế hoạch M5b. Chờ quyết định D-12 về thời hạn phản hồi Ultimatum khi người nhận offline.
+- File bị ảnh hưởng: DECISIONS_LOG.md.
+
+## 2026-11-22 — D-12 (M5b)
+
+- Trả lời nguyên văn: A
+- Quyết định: Ultimatum giữ hạn 15 giây khi người nhận offline. Hết hạn mặc định Chống lại nếu hợp lệ, nếu không thì Chấp nhận.
+- File bị ảnh hưởng: packages/game-engine/, packages/shared/, apps/server/, apps/web/ và DECISIONS_LOG.md.
+
+## 2026-11-22 — Nghiệm thu và điều chỉnh M5b
+
+- Trả lời nguyên văn: đã ok và cho ràng buộc khi đang áp dụng Ultimatum cho người chơi thì trong khi thẻ bài Ultimatum đang có tác dụng thì không thể sử dụng thẻ Ultimatum nữa mà phải chờ hết tác dụng của thẻ Ultimatum trước đó
+- Quyết định: Xác nhận luồng M5b đã thử. Cả hai ghế phải chờ khi popup còn mở hoặc ràng buộc còn chờ áp dụng hay đang có hiệu lực. Kết quả tức thời không tạo thời gian chờ thêm.
+- File bị ảnh hưởng: apps/server/src/room.ts, apps/server/src/normal.test.ts, packages/shared/src/protocol.ts, apps/web/src/online.tsx và DECISIONS_LOG.md.
+
+## 2026-11-22 — P-05 (M5b)
+
+- Trả lời nguyên văn: Ok tiếp tục
+- Quyết định: Commit M5b bằng tiếng Việt và đẩy lên GitHub trước khi sang P-02 của M5c.
+- File bị ảnh hưởng: DECISIONS_LOG.md và các tệp triển khai M5b.

@@ -6,6 +6,7 @@
     ".": "./src/board.ts",
     "./rng": "./src/rng.ts",
     "./shop": "./src/shop.ts",
-    "./normal": "./src/normal.ts"
+    "./normal": "./src/normal.ts",
+    "./debuff": "./src/debuff.ts"
   }
 }

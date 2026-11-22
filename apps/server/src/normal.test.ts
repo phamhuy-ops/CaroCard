@@ -86,3 +86,89 @@ test('Rarity Up 3★ applies to the next Shop refresh even when Hold is enabled'
   send(o, { type: 'place', row: 1, col: 0 });
   expect(room.snapshot(x)).toMatchObject({ round: 2, you: { privateState: { freeRerolls: 3, hold: true } } });
 });
+
+test('Ultimatum hides the prompt from the caster and restores Hair-Trigger action time at the exact deadline', () => {
+  const { room, x, o, send, ready } = setup();
+  const { action, popup } = gameConstants.timersMs;
+  x.shop.bench = [{ cardId: 'DEB-R01', star: 1 }];
+  x.effects.hair = { star: 1, from: 1, through: 1 };
+  ready();
+  expect(send(x, { type: 'useCard', slot: 0 }, 'ACTION', 1000).error).toBeUndefined();
+  const own = room.snapshot(x);
+  expect(own).toMatchObject({ actionDeadline: null, ultimatum: null, choiceWindow: null });
+  const window = room.snapshot(o).choiceWindow!;
+  const answer = { type: 'answerUltimatum', windowId: window.id, choice: 'accept' } as const;
+  expect(send(x, answer, 'ACTION', 1001).error).toBe('STALE_CHOICE');
+  expect(send(o, { ...answer, windowId: 'wrong-window' }, 'ACTION', 1002).error).toBe('STALE_CHOICE');
+  expect(send(x, { type: 'place', row: 0, col: 0 }, 'ACTION', 1003).error).toBe('CHOICE_PENDING');
+  expect(send(o, answer, 'ACTION', 1000 + popup).error).toBeUndefined();
+  expect(room.snapshot(x)).toMatchObject({ turn: 'X', actionDeadline: action + popup });
+  expect(send(x, { type: 'place', row: 0, col: 0 }, 'ACTION', 1100 + popup).error).toBeUndefined();
+  send(o, { type: 'place', row: 1, col: 0 }, 'ACTION', 1200 + popup);
+  expect(room.snapshot(o).you.canBuy).toBe(false);
+  expect(send(o, { type: 'buy', slot: 0, round: 2 }, 'PREPARATION', 1300 + popup).error).toBe('BUY_LOCKED');
+});
+
+test.each([1, 2])('offline Ultimatum %i★ resolves at 15s with the legal default', star => {
+  const { room, x, o, send, ready } = setup();
+  const popup = gameConstants.timersMs.popup;
+  x.shop.bench = [{ cardId: 'DEB-R01', star }];
+  ready();
+  room.setOnline(o, false, 10);
+  send(x, { type: 'useCard', slot: 0 }, 'ACTION', 20);
+  expect(room.snapshot(o).ultimatum?.canResist).toBe(star === 1);
+  room.advance(20 + popup);
+  expect(room.snapshot(o).choiceWindow).not.toBeNull();
+  room.advance(21 + popup);
+  expect(room.snapshot(o)).toMatchObject({ turn: 'O', choiceWindow: null, actionDeadline: 20 + popup + gameConstants.timersMs.action });
+  expect(room.reconnect(o, 22 + popup)).toBe(true);
+  send(o, { type: 'place', row: 1, col: 0 }, 'ACTION', 25 + popup);
+  const prep = room.snapshot(o);
+  expect(prep.you.privateState.shop.filter(slot => slot.blocked)).toHaveLength(star === 1 ? 2 : 0);
+  expect(prep.you.privateState.freeRerolls).toBe(star === 1 ? 1 : 2);
+});
+
+test('attacker payload is identical with or without a hidden Cutpurse target', () => {
+  function attack(withTarget: boolean) {
+    const { room, x, o, send, ready } = setup();
+    x.shop.bench = [{ cardId: 'DEB-C02', star: 3 }];
+    if (withTarget) o.shop.bench = [{ cardId: 'INT-R01', star: 3 }];
+    ready();
+    const result = send(x, { type: 'useCard', slot: 0 });
+    expect(room.snapshot(o).you.privateState.bench).toEqual([]);
+    const { you, lastCard, phase, turn, coins } = room.snapshot(x);
+    return { result, lastCard, phase, turn, coins, ownBench: you.privateState.bench };
+  }
+  expect(attack(true)).toEqual(attack(false));
+});
+
+test('Angel blocks Ultimatum completely while still consuming the card and the turn', () => {
+  const { room, x, o, send, ready } = setup();
+  x.shop.bench = [{ cardId: 'DEB-R01', star: 3 }];
+  o.effects.angelImmune = true;
+  ready();
+  expect(send(x, { type: 'useCard', slot: 0 }).error).toBeUndefined();
+  expect(room.snapshot(o)).toMatchObject({ turn: 'O', ultimatum: null, choiceWindow: null });
+  expect(room.snapshot(x).you.privateState.bench).toEqual([]);
+});
+
+test('both seats must wait until a scheduled Ultimatum expires before using another', () => {
+  const { room, x, o, send, ready } = setup();
+  x.shop.bench = [{ cardId: 'DEB-R01', star: 1 }, { cardId: 'DEB-R01', star: 2 }];
+  o.shop.bench = [{ cardId: 'DEB-R01', star: 1 }];
+  ready();
+  send(x, { type: 'useCard', slot: 0 });
+  send(o, { type: 'answerUltimatum', windowId: room.snapshot(o).choiceWindow!.id, choice: 'accept' });
+  expect(send(o, { type: 'useCard', slot: 0 }).error).toBe('ULTIMATUM_ACTIVE');
+  send(o, { type: 'place', row: 1, col: 0 });
+  ready();
+  expect(room.snapshot(x).ultimatumLocked).toBe(true);
+  expect(room.snapshot(x).you.privateState.bench[0].canUse).toBe(false);
+  expect(send(x, { type: 'useCard', slot: 0 }).error).toBe('ULTIMATUM_ACTIVE');
+  expect(x.shop.bench).toEqual([{ cardId: 'DEB-R01', star: 2 }]);
+  send(x, { type: 'place', row: 0, col: 0 });
+  send(o, { type: 'place', row: 1, col: 1 });
+  ready();
+  expect(room.snapshot(x).ultimatumLocked).toBe(false);
+  expect(send(x, { type: 'useCard', slot: 0 }).error).toBeUndefined();
+});
