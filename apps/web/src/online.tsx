@@ -45,6 +45,8 @@ const errors: Record<string, string> = {
 };
 
 const demonStatus = { Locked: 'Đang chịu nguyền', Unlocked: 'Đã giải nguyền', Contracted: 'Đã ký khế ước' };
+const crossTargets = [['DMN-01', 'Malphas'], ['DMN-02', 'Agares'], ['DMN-03', 'Asmodeus'],
+  ['DMN-04', 'Belial'], ['DMN-05', 'Abaddon']] as const;
 
 const demonText: Record<string, [string, string, string]> = {
   'DMN-01': ['Không dùng thẻ trong lượt Hành động trong các vòng liên tiếp.',
@@ -207,6 +209,7 @@ export function OnlineGame({ renderBoard }: {
   const [angle, setAngle] = useState<{ round: number; slot: number; from: Square | null } | null>(null);
   const [wall, setWall] = useState<{ round: number; slot: number; squares: Square[] } | null>(null);
   const [special, setSpecial] = useState<{ round: number; slot: number; id: 'SPC-02' | 'SPC-03' } | null>(null);
+  const [cross, setCross] = useState<{ round: number; slot: number } | null>(null);
 
   useEffect(() => {
     const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -306,6 +309,8 @@ export function OnlineGame({ renderBoard }: {
 
   const disabled = connection !== 'open' || pending;
   const opponent = snapshot?.players.find(player => player.host !== snapshot.you.host);
+  const crossCard = cross && snapshot?.round === cross.round ? snapshot.you.privateState.bench[cross.slot] : null;
+  const pickingCross = cross && crossCard?.id === 'SPC-01' && crossCard.canUse ? cross : null;
   const seconds = (deadline: number) => Math.max(0, Math.ceil((deadline - clock - offset) / 1000));
   const hair = snapshot?.you.hairTrigger;
   const angleCard = angle && snapshot?.round === angle.round ? snapshot.you.privateState.bench[angle.slot] : null;
@@ -432,7 +437,8 @@ export function OnlineGame({ renderBoard }: {
               )}
               {snapshot.result && <p role="status">{snapshot.result.kind === 'draw' ? 'Hòa ván'
                 : snapshot.result.kind === 'cancelled' ? 'Ván đã hủy do mất kết nối'
-                  : snapshot.result.kind === 'win' && `${snapshot.result.winner} thắng${snapshot.result.reason === 'disconnect' ? ' do đối thủ mất kết nối' : ''}`}</p>}
+                  : snapshot.result.kind === 'win' && `${snapshot.result.winner} thắng${snapshot.result.reason === 'disconnect'
+                    ? ' do đối thủ mất kết nối' : snapshot.result.reason === 'hellsDealer' ? ' · Hell’s Dealer' : ''}`}</p>}
               {snapshot.phase === 'ACTION' && <p>Lượt của {snapshot.turn}{snapshot.actionDeadline !== null
                 ? ` · ${seconds(snapshot.actionDeadline)} giây`
                 : snapshot.choiceWindow ? ` · Còn ${seconds(snapshot.choiceWindow.deadline)} giây để chọn` : ' · Đang chờ lựa chọn'}</p>}
@@ -452,6 +458,7 @@ export function OnlineGame({ renderBoard }: {
                 setAngle(null);
                 setWall(null);
                 setSpecial(null);
+                setCross(null);
                 if (id === 'BUF-R01') {
                   setAngle({ round: snapshot.round, slot, from: null });
                 } else if (id === 'BUF-E01' || (id === 'DMN-01' && snapshot.darkWallsAvailable > 0)) {
@@ -460,10 +467,32 @@ export function OnlineGame({ renderBoard }: {
                   command({ type: 'useDemon', slot });
                 } else if (id === 'SPC-02' || id === 'SPC-03') {
                   setSpecial({ round: snapshot.round, slot, id });
+                } else if (id === 'SPC-01') {
+                  setCross({ round: snapshot.round, slot });
                 } else {
                   command({ type: 'useCard', slot });
                 }
               }} />
+              {pickingCross && <section aria-label="Chọn mục tiêu Holy Cross">
+                <div className="room-actions">
+                  <p>Đoán Demon của đối thủ:</p>
+                  {crossTargets.map(([demon, name]) => <button key={demon} className="restart" disabled={disabled}
+                    onClick={() => {
+                      command({ type: 'useCard', slot: pickingCross.slot, cross: { side: 'opponent', demon } });
+                      setCross(null);
+                    }}>{name}</button>)}
+                </div>
+                <div className="room-actions">
+                  {crossTargets.filter(([demon]) => snapshot.you.privateState.bench.some(card => card.id === demon
+                    && (card.demon?.status === 'Locked' || card.demon?.status === 'Unlocked')))
+                    .map(([demon, name]) => <button key={demon} className="restart" disabled={disabled}
+                      onClick={() => {
+                        command({ type: 'useCard', slot: pickingCross.slot, cross: { side: 'self', demon } });
+                        setCross(null);
+                      }}>Tự giải trừ {name}</button>)}
+                  <button className="restart" onClick={() => setCross(null)}>Hủy chọn</button>
+                </div>
+              </section>}
               {pickingSpecial?.id === 'SPC-03' && <div className="room-actions" role="group" aria-label="Chọn thẻ để sao chép">
                 <p>Chọn thẻ để tạo bản sao 1★.</p>
                 {snapshot.you.privateState.bench.map((card, targetSlot) => card.mirrorTarget && (

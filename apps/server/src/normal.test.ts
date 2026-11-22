@@ -386,3 +386,119 @@ test('Asmodeus and the Belial cancellation apply both reductions to the base pre
   send(o, { type: 'place', row: 1, col: 0 });
   expect(room.snapshot(o).preparation?.O.deadline).toBe(7500);
 });
+
+test('Holy Cross removes a Locked enemy Demon without a counterattack and keeps the catalog blind', () => {
+  const { room, x, o, send, ready } = setup();
+  x.shop.bench = [{ cardId: 'SPC-01', star: 0 }];
+  o.shop.bench = [{ cardId: 'DMN-04', star: 0, demon: { status: 'Locked', progress: 2, failed: false, sourceId: 'b' } }];
+  ready();
+  expect(room.snapshot(x).you.privateState.bench[0].canUse).toBe(true);
+  const used = send(x, { type: 'useCard', slot: 0, cross: { side: 'opponent', demon: 'DMN-04' } });
+  expect(used.error).toBeUndefined();
+  expect(x.shop.bench).toHaveLength(0);
+  expect(o.shop.bench).toHaveLength(0);
+  expect(room.snapshot(x)).toMatchObject({ turn: 'O', choiceWindow: null, lastCard: { name: 'Holy Cross' } });
+});
+
+test('a wrong Holy Cross starts the received curse next round and self-dispel leaves coins unchanged', () => {
+  const { room, x, o, send, ready } = setup();
+  x.shop.bench = [{ cardId: 'SPC-01', star: 0 }];
+  ready();
+  expect(send(x, { type: 'useCard', slot: 0, cross: { side: 'opponent', demon: 'DMN-01' } }).error).toBeUndefined();
+  expect(x.shop.bench[0].demon).toMatchObject({ status: 'Locked', progress: 0, activeFrom: 2 });
+  send(o, { type: 'place', row: 1, col: 0 });
+  x.shop.bench.push({ cardId: 'SPC-01', star: 0 });
+  ready();
+  const coins = room.snapshot(x).coins.X;
+  expect(send(x, { type: 'useCard', slot: 1, cross: { side: 'self', demon: 'DMN-01' } }).error).toBeUndefined();
+  expect(x.shop.bench).toEqual([]);
+  expect(room.snapshot(x).coins.X).toBe(coins);
+});
+
+test('Hell’s Dealer wins ahead of a winning line on the same placement', () => {
+  const { room, x, o, send, ready } = setup();
+  for (const col of [0, 1, 2, 3]) {
+    ready();
+    send(x, { type: 'place', row: 0, col });
+    send(o, { type: 'place', row: 2, col });
+  }
+  x.shop.bench = ['DMN-01', 'DMN-02', 'DMN-03', 'DMN-04', 'DMN-05'].map(cardId => ({
+    cardId, star: 0, demon: { sourceId: cardId, status: cardId === 'DMN-02' ? 'Locked' : 'Contracted',
+      progress: cardId === 'DMN-02' ? 2 : 3, failed: false },
+  }));
+  ready();
+  expect(send(x, { type: 'place', row: 0, col: 4 }).error).toBeUndefined();
+  expect(room.snapshot(o)).toMatchObject({ phase: 'FINISHED', result: { kind: 'win', winner: 'X', reason: 'hellsDealer' } });
+});
+
+function crossDemon(cardId: string, sourceId = cardId, status: 'Locked' | 'Unlocked' | 'Contracted' = 'Contracted') {
+  return { cardId, star: 0, demon: { sourceId, status, progress: 3, failed: false } };
+}
+
+test('Holy Cross removes only the Malphas walls of the expelled source', () => {
+  const { room, x, o, send, ready } = setup();
+  x.shop.bench = [crossDemon('DMN-01', 'x-walls', 'Unlocked'), { cardId: 'SPC-01', star: 0 }];
+  o.shop.bench = [crossDemon('DMN-01', 'o-walls', 'Unlocked')];
+  ready();
+  send(x, { type: 'useDemon', slot: 0, walls: [{ row: 0, col: 0 }] });
+  send(o, { type: 'useDemon', slot: 0, walls: [{ row: 0, col: 1 }] });
+  ready();
+  send(x, { type: 'useCard', slot: 1, cross: { side: 'opponent', demon: 'DMN-01' } });
+  expect(room.snapshot(o).board.slice(0, 2)).toEqual(['Dark Wall', null]);
+});
+
+test('expelling Agares moves the Demon owner’s marks and Belial grants a new forced choice', () => {
+  const { room, x, o, send, ready } = setup();
+  x.shop.bench = [{ cardId: 'SPC-01', star: 0 }];
+  o.shop.bench = [crossDemon('DMN-02'), crossDemon('DMN-04', 'b', 'Unlocked'), { cardId: 'BUF-C01', star: 1 }];
+  ready();
+  send(x, { type: 'place', row: 7, col: 7 });
+  send(o, { type: 'place', row: 4, col: 4 });
+  ready();
+  send(x, { type: 'useCard', slot: 0, cross: { side: 'opponent', demon: 'DMN-02' } });
+  expect(room.snapshot(x).board[0]).toBe('O');
+  expect(room.snapshot(x).board[4 * 15 + 4]).toBeNull();
+  send(o, { type: 'place', row: 4, col: 5 });
+  x.shop.bench = [{ cardId: 'SPC-01', star: 0 }];
+  ready();
+  const forced = Reflect.get(room, 'forcedTurns') as Map<'X' | 'O', { caster: 'X' | 'O'; sourceId: string }>;
+  forced.set('X', { caster: 'O', sourceId: 'b' });
+  send(x, { type: 'useCard', slot: 0, cross: { side: 'opponent', demon: 'DMN-04' } });
+  const window = room.snapshot(x).choiceWindow!;
+  expect(window.kind).toBe('belial');
+  expect(o.shop.bench).toEqual([]);
+  send(x, { type: 'answerBelial', windowId: window.id, target: { row: 2, col: 2 } });
+  ready();
+  expect(room.snapshot(x)).toMatchObject({ choiceWindow: null, turn: 'X', you: { canPlace: true } });
+});
+
+test('expelling Asmodeus preserves another preparation reduction and Abaddon clears only its own blocks', () => {
+  const { room, x, o, send, ready } = setup();
+  x.shop.bench = [{ cardId: 'SPC-01', star: 0 }];
+  x.reducedPreparation = { from: 2, through: 3 };
+  x.shop.blocks = ['abaddon', 'other-effect', null, null];
+  o.shop.bench = [crossDemon('DMN-03'), crossDemon('DMN-05', 'abaddon')];
+  ready();
+  send(x, { type: 'useCard', slot: 0, cross: { side: 'opponent', demon: 'DMN-03' } });
+  send(o, { type: 'place', row: 0, col: 0 });
+  expect(room.snapshot(x).preparation?.X.deadline).toBe(
+    gameConstants.timersMs.prep * gameConstants.belialCancelPrepFactor);
+  x.shop.bench = [{ cardId: 'SPC-01', star: 0 }];
+  ready();
+  send(x, { type: 'useCard', slot: 0, cross: { side: 'opponent', demon: 'DMN-05' } });
+  expect(x.shop.blocks).toEqual([null, 'other-effect', null, null]);
+});
+
+test('Holy Cross cannot self-expel a Contracted Demon and a wrong guess can consume without granting one', () => {
+  const { x, send, ready } = setup();
+  x.shop.bench = [
+    { cardId: 'SPC-01', star: 0 }, crossDemon('DMN-01'), crossDemon('DMN-02', 'a', 'Locked'),
+    crossDemon('DMN-03', 'b', 'Locked'),
+  ];
+  ready();
+  expect(send(x, { type: 'useCard', slot: 0, cross: { side: 'self', demon: 'DMN-01' } }).error)
+    .toBe('INVALID_SPECIAL_TARGET');
+  expect(x.shop.bench[0].cardId).toBe('SPC-01');
+  expect(send(x, { type: 'useCard', slot: 0, cross: { side: 'opponent', demon: 'DMN-05' } }).error).toBeUndefined();
+  expect(x.shop.bench.map(card => card.cardId)).toEqual(['DMN-01', 'DMN-02', 'DMN-03']);
+});

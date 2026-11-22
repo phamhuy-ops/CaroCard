@@ -201,3 +201,15 @@ export function blastMakeshiftWall(game: Game, { row, col }: Square): Game | nul
   delete wallOwners[index];
   return { ...game, board, wallOwners };
 }
+
+export function removeDarkWalls(game: Game, sourceId: string): Game {
+  const board = [...game.board];
+  const darkWallSources = { ...game.darkWallSources };
+  for (const [index, source] of Object.entries(game.darkWallSources)) {
+    if (source !== sourceId) continue;
+    const square = Number(index);
+    if (board[square] === 'Dark Wall') board[square] = null;
+    delete darkWallSources[square];
+  }
+  return { ...game, board, darkWallSources };
+}

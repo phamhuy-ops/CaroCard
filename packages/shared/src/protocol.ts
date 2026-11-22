@@ -24,6 +24,10 @@ export const commandSchema = z.discriminatedUnion('type', [
     move: z.strictObject({ from: squareSchema, to: squareSchema }).optional(),
     walls: z.array(squareSchema).optional(),
     blast: squareSchema.optional(),
+    cross: z.strictObject({
+      side: z.enum(['opponent', 'self']),
+      demon: z.enum(['DMN-01', 'DMN-02', 'DMN-03', 'DMN-04', 'DMN-05']),
+    }).optional(),
   }),
   z.strictObject({
     ...commandFields, type: z.literal('mirror'), round: z.int().positive(), slot: z.int().nonnegative(),

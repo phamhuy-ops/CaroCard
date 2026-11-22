@@ -15,6 +15,11 @@ export function demonGoal(cardId: string) {
   return rules.progress[cardId as DemonId] ?? 0;
 }
 
+export function isHellsDealer(bench: readonly BenchCard[]) {
+  return bench.length === constants.bench.slots && constants.demonRewardOrder.every(id =>
+    bench.some(card => card.cardId === id && card.demon?.status === 'Contracted'));
+}
+
 export function checkDemon(card: BenchCard, passed: boolean): BenchCard {
   const demon = card.demon;
   if (demon?.status !== 'Locked') return card;

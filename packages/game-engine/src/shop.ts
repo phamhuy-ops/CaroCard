@@ -19,7 +19,12 @@ export interface BenchCard {
     progress: number;
     failed: boolean;
     sourceId: string;
+    activeFrom?: number;
   };
+}
+
+export function lockedDemon(cardId: string, sourceId: string, activeFrom: number): BenchCard {
+  return { cardId, star: 0, demon: { status: 'Locked', progress: 0, failed: false, sourceId, activeFrom } };
 }
 
 export interface Shop {
@@ -219,8 +224,7 @@ export function buy(shop: Shop, coins: number, index: number, round = 1, sourceI
   if (demon && lockedDemonCount(shop) >= constants.demonLocking.maxLocked) return { error: 'DEMON_LIMIT' };
   if (coins < card.cost) return { error: 'NOT_ENOUGH_COINS' };
 
-  const item: BenchCard = { cardId: id, star: card.maxStar > 0 ? 1 : 0 };
-  if (demon) item.demon = { status: 'Locked', progress: 0, failed: false, sourceId: sourceId ?? id };
+  const item: BenchCard = demon ? lockedDemon(id, sourceId ?? id, round) : { cardId: id, star: card.maxStar > 0 ? 1 : 0 };
   if (card.selfEvolving) item.piggy = { purchasedRound: round, noSpendRounds: 0, totalEarned: 0 };
   const bench = mergeBench([...shop.bench, item], id);
   if (bench.length > benchRules.slots) return { error: 'BENCH_FULL' };

@@ -1,12 +1,12 @@
 import { randomBytes, randomInt, randomUUID } from 'node:crypto';
-import { blastMakeshiftWall, boardSize, createGame, isEdge, moveWithNewAngle, newAngleTargets, placeMakeshiftWalls, placeTurn,
+import { blastMakeshiftWall, boardSize, createGame, isEdge, moveWithNewAngle, newAngleTargets, placeMakeshiftWalls, placeTurn, removeDarkWalls,
   remainingWallCapacity, wallsForStar } from '@carocard/game-engine';
 import { createRng } from '@carocard/game-engine/rng';
 import type { Rng } from '@carocard/game-engine/rng';
-import { advanceInterest, buy, canDiscard, cardDefinition, createShop, discard, lockedDemonCount, refreshShop, reroll } from '@carocard/game-engine/shop';
+import { advanceInterest, buy, canDiscard, cardDefinition, createShop, discard, lockedDemon, lockedDemonCount, refreshShop, releaseBlock, reroll } from '@carocard/game-engine/shop';
 import type { BenchCard, Shop } from '@carocard/game-engine/shop';
 import { abaddonReward, agaresReward, canCancelDemon, cancelDemon, checkDemon, darkWallsRequired, demonGoal,
-  demonRules, flagCurse, forbiddenAbaddonRun, malphasReward, normalCard, removeRandomCards } from '@carocard/game-engine/demon';
+  demonRules, flagCurse, forbiddenAbaddonRun, isHellsDealer, malphasReward, normalCard, removeRandomCards } from '@carocard/game-engine/demon';
 import { activateNormal, canPairWithMark, canUseActionCard, createNormalEffects, timedEffectActive } from '@carocard/game-engine/normal';
 import { isMirrorTarget, mirrorImage } from '@carocard/game-engine/special';
 import type { NormalEffects } from '@carocard/game-engine/normal';
@@ -24,6 +24,8 @@ interface RoomOptions {
   prepDuration?: (seat: Seat) => number;
   roundEndStep?: (step: string, seat: Seat) => void;
   roundTransitionMs?: number;
+  seed?: number;
+  choiceId?: () => string;
 }
 
 export interface Player {
@@ -65,7 +67,7 @@ export class Room {
   private nextRoundAt: number | null = null;
   private choiceWindow: ChoiceWindow | null = null;
   private pendingUltimatum: { star: number; keepTurn: boolean } | null = null;
-  private readonly forcedTurns = new Map<Seat, Seat>();
+  private readonly forcedTurns = new Map<Seat, { caster: Seat; sourceId: string }>();
   private round = 0;
   private coins = { ...startCoins };
   private connectionResult: Snapshot['result'] = null;
@@ -82,16 +84,19 @@ export class Room {
   private readonly prepDuration: (seat: Seat) => number;
   private readonly roundEndStep?: RoomOptions['roundEndStep'];
   private readonly roundTransitionMs: number;
+  private readonly choiceId: () => string;
 
   constructor(code: string, tossCoin: () => Face = () => randomInt(2) === 0 ? 'heads' : 'tails', options: RoomOptions = {}) {
     this.code = code;
     this.tossCoin = tossCoin;
     this.now = options.now ?? (() => performance.now());
-    this.rng = options.rng ?? createRng(randomBytes(4).readUInt32LE());
-    this.shopRng = { X: createRng(randomBytes(4).readUInt32LE()), O: createRng(randomBytes(4).readUInt32LE()) };
+    const seed = options.seed ?? randomBytes(4).readUInt32LE();
+    this.rng = options.rng ?? createRng(seed);
+    this.shopRng = { X: createRng(seed ^ 0x9e3779b9), O: createRng(seed ^ 0x85ebca6b) };
     this.prepDuration = options.prepDuration ?? (() => timersMs.prep);
     this.roundEndStep = options.roundEndStep;
     this.roundTransitionMs = options.roundTransitionMs ?? 3000;
+    this.choiceId = options.choiceId ?? randomUUID;
   }
 
   enqueue(work: () => void) {
@@ -218,6 +223,14 @@ export class Room {
     this.pendingUltimatum = null;
   }
 
+  private confirmResult() {
+    const dealer = this.players.find(player => player.seat && isHellsDealer(player.shop.bench))?.seat;
+    if (dealer) this.game = { ...this.game, result: { kind: 'win', winner: dealer, reason: 'hellsDealer' } };
+    if (!this.game.result) return false;
+    this.finish();
+    return true;
+  }
+
   private beginPreparation(at: number) {
     this.round++;
     this.phase = 'PREPARATION';
@@ -254,8 +267,8 @@ export class Room {
 
   private openAction(at: number) {
     this.actionDeadline = at + timersMs.action;
-    const caster = this.forcedTurns.get(this.game.turn);
-    if (caster) this.openChoice(caster, 'belial', at);
+    const forced = this.forcedTurns.get(this.game.turn);
+    if (forced) this.openChoice(forced.caster, 'belial', at);
   }
 
   private randomEmptySquare() {
@@ -273,7 +286,8 @@ export class Room {
   }
 
   private updateCurse(player: Player, cardId: string, condition: (card: BenchCard) => boolean) {
-    const slot = player.shop.bench.findIndex(card => card.cardId === cardId && card.demon?.status === 'Locked');
+    const slot = player.shop.bench.findIndex(card => card.cardId === cardId && card.demon?.status === 'Locked'
+      && (card.demon.activeFrom ?? 1) <= this.round);
     if (slot < 0) return;
     const bench = [...player.shop.bench];
     const current = bench[slot];
@@ -284,7 +298,8 @@ export class Room {
 
   private checkAbaddonBoard() {
     for (const player of this.players) {
-      if (player.seat && player.shop.bench.some(card => card.cardId === 'DMN-05' && card.demon?.status === 'Locked')
+      if (player.seat && player.shop.bench.some(card => card.cardId === 'DMN-05' && card.demon?.status === 'Locked'
+        && (card.demon.activeFrom ?? 1) <= this.round)
         && forbiddenAbaddonRun(this.game, player.seat)) player.shop = flagCurse(player.shop, ['DMN-05']);
     }
   }
@@ -325,7 +340,7 @@ export class Room {
       const opponent = this.players.find(other => other.seat === opponentSeat);
       if (!opponent || this.forcedTurns.has(opponentSeat) || command.walls !== undefined) return ErrorCode.DemonUnavailable;
       opponent.shop = removeRandomCards(opponent.shop, normalCard, demonRules.belial.destroyCards, this.rng);
-      this.forcedTurns.set(opponentSeat, seat);
+      this.forcedTurns.set(opponentSeat, { caster: seat, sourceId: card.demon.sourceId });
     } else return ErrorCode.DemonUnavailable;
 
     const bench = [...player.shop.bench];
@@ -333,8 +348,35 @@ export class Room {
     player.shop = { ...player.shop, bench };
     this.noteActionCard(player);
     this.lastCard = { seat, name: cardDefinition(card.cardId).name };
-    if (this.game.result) this.finish();
-    else this.endAction(at);
+    if (!this.confirmResult()) this.endAction(at);
+  }
+
+  private holyCross(player: Player, seat: Seat, cross: NonNullable<Extract<Command, { type: 'useCard' }>['cross']>, sourceId: string) {
+    const target = cross.side === 'self' ? player : this.players.find(other => other.seat !== seat);
+    if (!target?.seat) throw new Error('Holy Cross target missing');
+    const slot = target.shop.bench.findIndex(card => card.cardId === cross.demon && card.demon);
+    const demon = target.shop.bench[slot]?.demon;
+    if (!demon) {
+      if (!player.shop.bench.some(card => card.cardId === cross.demon)
+        && lockedDemonCount(player.shop) < gameConstants.demonLocking.maxLocked) {
+        player.shop = { ...player.shop, bench: [...player.shop.bench, lockedDemon(cross.demon, sourceId, this.round + 1)] };
+      }
+      return;
+    }
+    target.shop = { ...target.shop, bench: target.shop.bench.filter((_, index) => index !== slot) };
+    if (cross.side === 'self' || demon.status === 'Locked') return;
+    if (cross.demon === 'DMN-01') this.game = removeDarkWalls(this.game, demon.sourceId);
+    if (cross.demon === 'DMN-02') this.game = agaresReward(this.game, seat, this.rng);
+    if (cross.demon === 'DMN-04') {
+      for (const [victim, forced] of this.forcedTurns) {
+        if (forced.sourceId === demon.sourceId && forced.caster === target.seat) this.forcedTurns.delete(victim);
+      }
+      target.shop = removeRandomCards(target.shop, normalCard, demonRules.belial.destroyCards, this.rng);
+      if (!this.forcedTurns.has(target.seat)) this.forcedTurns.set(target.seat, { caster: seat, sourceId });
+    }
+    if (cross.demon === 'DMN-05') player.shop = releaseBlock(player.shop, demon.sourceId);
+    // Asmodeus derives its factor from the Contracted card still in the Bench.
+    this.checkAbaddonBoard();
   }
 
   private place(row: number, col: number, at: number, hairActive: boolean) {
@@ -352,7 +394,9 @@ export class Room {
     }
     if (next.result) {
       if (player) this.settleAsmodeus(player);
-      this.finish();
+      this.confirmResult();
+    } else if (this.confirmResult()) {
+      return;
     } else if (hairActive && !this.usedCard) {
       this.placed = true;
     } else {
@@ -366,6 +410,7 @@ export class Room {
       this.updateCurse(actor, 'DMN-01', card => !card.demon?.failed);
       this.settleAsmodeus(actor);
     }
+    if (this.confirmResult()) return;
     this.placed = false;
     this.usedCard = false;
     this.timelyAsmodeusMark = false;
@@ -390,6 +435,7 @@ export class Room {
           if (step === 'demonCheck') {
             const player = this.players.find(player => player.seat === seat);
             if (player) this.checkRoundDemons(player, seat);
+            if (this.confirmResult()) return;
           }
           this.roundEndStep?.(step, seat);
           if (step === 'shopRefreshAndReroll') this.refreshSeatShop(seat, this.round + 1);
@@ -450,7 +496,7 @@ export class Room {
     if (this.actionDeadline === null || at > this.actionDeadline) throw new Error('No active turn');
     const duration = kind === 'belial' ? timersMs.belial : timersMs.popup;
     const choice = {
-      id: randomUUID(), seat, kind, deadline: at + duration,
+      id: this.choiceId(), seat, kind, deadline: at + duration,
       resumeRemainingMs: this.actionDeadline - at,
     };
     this.choiceWindow = choice;
@@ -608,7 +654,7 @@ export class Room {
       const coins = this.coins[seat];
       const result = command.type === 'reroll'
         ? reroll(player.shop, coins, this.round, this.shopRng[seat], this.rarityStar(player, this.round))
-        : command.type === 'buy' ? buy(player.shop, coins, command.slot, this.round, command.commandId)
+        : command.type === 'buy' ? buy(player.shop, coins, command.slot, this.round, `${seat}:${command.commandId}`)
           : discard(player.shop, coins, command.slot);
       if ('error' in result) return result.error;
       player.shop = result.shop;
@@ -649,9 +695,13 @@ export class Room {
       const isNewAngle = card.cardId === 'BUF-R01';
       const isMakeshiftWall = card.cardId === 'BUF-E01';
       const isPowderKeg = card.cardId === 'SPC-02';
+      const isHolyCross = card.cardId === 'SPC-01';
       if (isNewAngle !== Boolean(command.move)) return ErrorCode.InvalidMove;
       if (isMakeshiftWall !== Boolean(command.walls)) return ErrorCode.InvalidWalls;
       if (isPowderKeg !== Boolean(command.blast)) return ErrorCode.InvalidSpecialTarget;
+      if (isHolyCross !== Boolean(command.cross)) return ErrorCode.InvalidSpecialTarget;
+      if (command.cross?.side === 'self' && !player.shop.bench.some(item => item.cardId === command.cross?.demon
+        && (item.demon?.status === 'Locked' || item.demon?.status === 'Unlocked'))) return ErrorCode.InvalidSpecialTarget;
       const moved = command.move && moveWithNewAngle(this.game, card.star, command.move.from, command.move.to);
       if (isNewAngle && !moved) return ErrorCode.InvalidMove;
       const built = command.walls && placeMakeshiftWalls(this.game, card.star, command.walls);
@@ -664,11 +714,13 @@ export class Room {
       player.shop = { ...player.shop, bench: player.shop.bench.filter((_, index) => index !== command.slot) };
       this.noteActionCard(player);
       this.lastCard = { seat, name: definition.name };
-      if (boardAction) {
+      if (command.cross) {
+        this.holyCross(player, seat, command.cross, `${seat}:${command.commandId}`);
+      } else if (boardAction) {
         this.game = boardAction;
         this.checkAbaddonBoard();
         if (boardAction.result) {
-          this.finish();
+          this.confirmResult();
           return;
         }
       } else if (definition.group === 'debuff') {

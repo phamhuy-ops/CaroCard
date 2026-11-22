@@ -234,3 +234,15 @@
 - Trả lời nguyên văn: đẩy m7 lên git và chọn A cho m8
 - Quyết định: Tạo commit M7 bằng tiếng Việt và đẩy nhánh main lên GitHub.
 - File bị ảnh hưởng: DECISIONS_LOG.md và các tệp triển khai M7.
+
+## 2026-11-22 — P-02 (M8)
+
+- Trả lời nguyên văn: đẩy m7 lên git và chọn A cho m8
+- Quyết định: Duyệt triển khai Holy Cross, Hell’s Dealer và kiểm tra tái hiện M8.
+- File bị ảnh hưởng: packages/game-engine/, packages/shared/, apps/server/, apps/web/ và DECISIONS_LOG.md.
+
+## 2026-11-22 — Nghiệm thu và P-05 (M8)
+
+- Trả lời nguyên văn: commit lên git và tiếp tục (sau khi làm hết t sẽ yêu cầu bạn tạo cho t 1 list check để kt toàn bộ dự án)
+- Quyết định: Commit M8 bằng tiếng Việt, đẩy nhánh main lên GitHub và tiếp tục sang P-02 của M9.
+- File bị ảnh hưởng: DECISIONS_LOG.md và các tệp triển khai M8.
