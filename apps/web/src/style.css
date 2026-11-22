@@ -153,3 +153,5 @@ button:focus-visible { outline: 2px solid white; outline-offset: -2px; }
 
 .ultimatum h2 { margin-top: 0; }
 .ultimatum::backdrop { background: rgb(0 0 0 / .65); }
+.network-metrics { margin: .5rem 0 .75rem; }
+.network-metrics summary { cursor: pointer; }

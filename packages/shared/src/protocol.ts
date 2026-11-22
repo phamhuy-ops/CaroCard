@@ -48,6 +48,7 @@ export const commandSchema = z.discriminatedUnion('type', [
 ]);
 
 export const clientMessageSchema = z.discriminatedUnion('type', [
+  z.strictObject({ type: z.literal('ping'), nonce: z.int().nonnegative() }),
   z.strictObject({ type: z.literal('create') }),
   z.strictObject({ type: z.literal('join'), roomCode }),
   z.strictObject({ type: z.literal('resume'), roomCode, token: z.string().regex(/^[a-f0-9]{64}$/) }),
@@ -173,6 +174,7 @@ export interface Snapshot {
     privateState: PrivateState; canPlace: boolean; canEndTurn: boolean; canBuy: boolean; wallsRemaining: number;
     hairTrigger: { from: number; through: number } | null;
     benchLocked: boolean;
+    ultimatumTimeout: { round: number; star: number; choice: 'accept' | 'resist'; effect: string } | null;
   };
 }
 
@@ -186,6 +188,7 @@ export interface CommandResult {
 
 export type ServerMessage =
   | { type: 'session'; roomCode: string; token: string }
+  | { type: 'pong'; nonce: number; serverTime: number }
   | { type: 'snapshot'; snapshot: Snapshot }
   | { type: 'error'; error: ErrorCode }
   | CommandResult;

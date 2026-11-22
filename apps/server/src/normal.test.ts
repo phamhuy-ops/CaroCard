@@ -123,6 +123,8 @@ test.each([1, 2])('offline Ultimatum %i★ resolves at 15s with the legal defaul
   room.advance(21 + popup);
   expect(room.snapshot(o)).toMatchObject({ turn: 'O', choiceWindow: null, actionDeadline: 20 + popup + gameConstants.timersMs.action });
   expect(room.reconnect(o, 22 + popup)).toBe(true);
+  expect(room.snapshot(o).you.ultimatumTimeout).toMatchObject({ star, round: 1, choice: star === 1 ? 'resist' : 'accept' });
+  expect(room.snapshot(x).you.ultimatumTimeout).toBeNull();
   send(o, { type: 'place', row: 1, col: 0 }, 'ACTION', 25 + popup);
   const prep = room.snapshot(o);
   expect(prep.you.privateState.shop.filter(slot => slot.blocked)).toHaveLength(star === 1 ? 2 : 0);

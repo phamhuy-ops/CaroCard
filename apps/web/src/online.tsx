@@ -5,6 +5,7 @@ import timers from '@carocard/shared/timers' with { type: 'json' };
 import { boardSize, newAngleTargets, wallsForStar } from '@carocard/game-engine';
 import type { Square } from '@carocard/game-engine';
 import { demonRules } from '@carocard/game-engine/demon';
+import { summarizeRtt } from '@carocard/shared/network-metrics';
 
 const sessionKey = 'carocard.roomSession';
 const faces: Record<Face, string> = { heads: 'Ngửa', tails: 'Sấp' };
@@ -206,6 +207,8 @@ export function OnlineGame({ renderBoard }: {
   const [pending, setPending] = useState(false);
   const [offset, setOffset] = useState(0);
   const [clock, setClock] = useState(() => performance.now());
+  const [network, setNetwork] = useState<ReturnType<typeof summarizeRtt>>(null);
+  const [recoveryMs, setRecoveryMs] = useState<number | null>(null);
   const [angle, setAngle] = useState<{ round: number; slot: number; from: Square | null } | null>(null);
   const [wall, setWall] = useState<{ round: number; slot: number; squares: Square[] } | null>(null);
   const [special, setSpecial] = useState<{ round: number; slot: number; id: 'SPC-02' | 'SPC-03' } | null>(null);
@@ -215,10 +218,27 @@ export function OnlineGame({ renderBoard }: {
     const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
     let attempts = 0;
     let retry: ReturnType<typeof setTimeout> | undefined;
+    let sequence = 0;
+    let lostAt: number | undefined;
+    let joined = false;
+    const samples: number[] = [];
+    let ping: { nonce: number; at: number } | null = null;
+
+    function sendPing() {
+      const client = socket.current;
+      if (!client || client.readyState !== WebSocket.OPEN) return;
+      const at = performance.now();
+      if (ping && at - ping.at < 5000) return;
+      ping = { nonce: ++sequence, at };
+      client.send(JSON.stringify({ type: 'ping', nonce: ping.nonce } satisfies ClientMessage));
+    }
+
     function connect() {
       const client = new WebSocket(`${protocol}//${location.host}/ws`);
       socket.current = client;
+      let bestRtt = Infinity;
       client.onopen = () => {
+        sendPing();
         const saved = sessionStorage.getItem(sessionKey);
         if (saved) {
           try {
@@ -233,6 +253,8 @@ export function OnlineGame({ renderBoard }: {
         setConnection('open');
       };
       client.onclose = event => {
+        ping = null;
+        if (joined) lostAt ??= performance.now();
         if (event.code === 4001) {
           setConnection('replaced');
           return;
@@ -244,15 +266,34 @@ export function OnlineGame({ renderBoard }: {
       client.onmessage = ({ data }) => {
         const message = JSON.parse(String(data)) as ServerMessage;
         switch (message.type) {
+          case 'pong': {
+            if (message.nonce !== ping?.nonce) break;
+            const receivedAt = performance.now();
+            const rtt = receivedAt - ping.at;
+            samples.push(rtt);
+            if (samples.length > 60) samples.shift();
+            setNetwork(summarizeRtt(samples));
+            if (rtt < bestRtt) {
+              bestRtt = rtt;
+              setOffset(message.serverTime - (ping.at + receivedAt) / 2);
+            }
+            ping = null;
+            break;
+          }
           case 'session':
             attempts = 0;
+            joined = true;
             sessionStorage.setItem(sessionKey, JSON.stringify({ roomCode: message.roomCode, token: message.token }));
             if (outstanding.current) client.send(JSON.stringify(outstanding.current));
             break;
           case 'snapshot': {
             const receivedAt = performance.now();
             setSnapshot(message.snapshot);
-            setOffset(message.snapshot.serverTime - receivedAt);
+            if (!Number.isFinite(bestRtt)) setOffset(message.snapshot.serverTime - receivedAt);
+            if (lostAt !== undefined) {
+              setRecoveryMs(Math.round(receivedAt - lostAt));
+              lostAt = undefined;
+            }
             setClock(receivedAt);
             setConnection('open');
             if (!outstanding.current) setPending(false);
@@ -272,6 +313,8 @@ export function OnlineGame({ renderBoard }: {
                 sessionStorage.removeItem(sessionKey);
                 outstanding.current = null;
                 setSnapshot(null);
+                joined = false;
+                lostAt = undefined;
               }
               setConnection('open');
             }
@@ -281,9 +324,11 @@ export function OnlineGame({ renderBoard }: {
     }
     connect();
     const tick = setInterval(() => setClock(performance.now()), 250);
+    const probe = setInterval(sendPing, 1000);
     return () => {
       clearTimeout(retry);
       clearInterval(tick);
+      clearInterval(probe);
       const client = socket.current;
       if (client) {
         client.onopen = client.onclose = client.onmessage = null;
@@ -368,6 +413,12 @@ export function OnlineGame({ renderBoard }: {
 
   return (
     <section className="online">
+      <details className="network-metrics">
+        <summary>Đo mạng</summary>
+        {network ? <p>RTT p50 {network.p50} ms · p95 {network.p95} ms · {network.count} mẫu</p>
+          : <p>Đang chờ mẫu RTT.</p>}
+        {recoveryMs !== null && <p>Khôi phục lần gần nhất {recoveryMs} ms</p>}
+      </details>
       {connection === 'connecting' && <p role="status">Đang kết nối…</p>}
       {connection === 'closed' && <p role="status">Mất kết nối. Đang thử kết nối lại…</p>}
       {connection === 'replaced' && <p role="status">Phiên đang mở ở tab khác.</p>}
@@ -417,6 +468,11 @@ export function OnlineGame({ renderBoard }: {
               {snapshot.nextRoundAt !== null && <p role="status">Vòng {snapshot.round + 1} bắt đầu sau {seconds(snapshot.nextRoundAt)} giây.</p>}
               {snapshot.you.benchLocked && <p>Kho bài đang bị khóa.</p>}
               {snapshot.lastCard && <p>{snapshot.lastCard.seat} đã dùng {snapshot.lastCard.name}.</p>}
+              {snapshot.you.ultimatumTimeout && <p role="status">
+                Brutal Ultimatum {snapshot.you.ultimatumTimeout.star}★ vòng {snapshot.you.ultimatumTimeout.round} hết giờ.
+                {' '}Server chọn <strong>{snapshot.you.ultimatumTimeout.choice === 'resist' ? 'Chống lại' : 'Chấp nhận'}</strong>.
+                {' '}{snapshot.you.ultimatumTimeout.effect}
+              </p>}
               {hair && <p>{snapshot.round < hair.from
                 ? `Hair-Trigger bắt đầu từ vòng ${hair.from}.`
                 : `Hair-Trigger đến hết vòng ${hair.through} · Dùng một thẻ tương thích và đặt một dấu theo thứ tự tùy chọn.`}</p>}

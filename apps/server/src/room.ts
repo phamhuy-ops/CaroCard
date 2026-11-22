@@ -1,4 +1,4 @@
-import { randomBytes, randomInt, randomUUID } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { blastMakeshiftWall, boardSize, createGame, isEdge, moveWithNewAngle, newAngleTargets, placeMakeshiftWalls, placeTurn, removeDarkWalls,
   remainingWallCapacity, wallsForStar } from '@carocard/game-engine';
 import { createRng } from '@carocard/game-engine/rng';
@@ -44,6 +44,7 @@ export interface Player {
   actionCardsLockedThrough: number;
   resetCoinsAt: number;
   reducedPreparation: { from: number; through: number } | null;
+  ultimatumTimeout: Snapshot['you']['ultimatumTimeout'];
 }
 
 function publicPlayer({ host, online, face, seat }: Player) {
@@ -86,23 +87,43 @@ export class Room {
   private readonly roundTransitionMs: number;
   private readonly choiceId: () => string;
 
-  constructor(code: string, tossCoin: () => Face = () => randomInt(2) === 0 ? 'heads' : 'tails', options: RoomOptions = {}) {
+  constructor(code: string, tossCoin?: () => Face, options: RoomOptions = {}) {
     this.code = code;
-    this.tossCoin = tossCoin;
     this.now = options.now ?? (() => performance.now());
     const seed = options.seed ?? randomBytes(4).readUInt32LE();
+    const coinRng = createRng(seed ^ 0xc2b2ae35);
+    this.tossCoin = tossCoin ?? (() => coinRng.next() < 0.5 ? 'heads' : 'tails');
     this.rng = options.rng ?? createRng(seed);
     this.shopRng = { X: createRng(seed ^ 0x9e3779b9), O: createRng(seed ^ 0x85ebca6b) };
     this.prepDuration = options.prepDuration ?? (() => timersMs.prep);
     this.roundEndStep = options.roundEndStep;
     this.roundTransitionMs = options.roundTransitionMs ?? 3000;
-    this.choiceId = options.choiceId ?? randomUUID;
+    let sequence = 0;
+    this.choiceId = options.choiceId ?? (() => `00000000-0000-4000-8000-${(++sequence).toString(16).padStart(12, '0')}`);
   }
 
   enqueue(work: () => void) {
     const operation = this.queue.then(work);
     this.queue = operation.catch(() => {});
     return operation;
+  }
+
+  matchHash() {
+    return createHash('sha256').update(JSON.stringify({
+      players: this.players.map(player => {
+        const snapshot = this.snapshot(player);
+        const you: Partial<Snapshot['you']> = { ...snapshot.you };
+        delete you.ultimatumTimeout;
+        return {
+          snapshot: { ...snapshot, serverTime: 0, you },
+          shop: player.shop, effects: player.effects, holdUntil: player.holdUntil, expired: player.expired,
+          benchLockedThrough: player.benchLockedThrough, actionCardsLockedThrough: player.actionCardsLockedThrough,
+          resetCoinsAt: player.resetCoinsAt, reducedPreparation: player.reducedPreparation,
+        };
+      }),
+      game: this.game, forcedTurns: [...this.forcedTurns], pendingUltimatum: this.pendingUltimatum,
+      placed: this.placed, usedCard: this.usedCard, timelyAsmodeusMark: this.timelyAsmodeusMark,
+    })).digest('hex');
   }
 
   join() {
@@ -123,6 +144,7 @@ export class Room {
       actionCardsLockedThrough: 0,
       resetCoinsAt: 0,
       reducedPreparation: null,
+      ultimatumTimeout: null,
     };
     this.players.push(player);
     this.revision++;
@@ -187,7 +209,7 @@ export class Room {
           const target = this.players.find(player => player.seat === this.choiceWindow?.seat);
           if (!target?.seat) throw new Error('Ultimatum target missing');
           const choice = canResistUltimatum(this.pendingUltimatum.star, this.coins[target.seat]) ? 'resist' : 'accept';
-          this.resolveUltimatum(target, target.seat, choice, deadline);
+          this.resolveUltimatum(target, target.seat, choice, deadline, true);
         } else if (this.choiceWindow.kind === 'belial' && this.forcedTurns.has(this.game.turn)) {
           this.forceMark(this.randomEmptySquare(), deadline);
           this.revision++;
@@ -477,13 +499,23 @@ export class Room {
     this.coins[seat] = value.coins;
   }
 
-  private resolveUltimatum(target: Player, seat: Seat, choice: UltimatumChoice, at: number) {
+  private resolveUltimatum(target: Player, seat: Seat, choice: UltimatumChoice, at: number, timedOut = false) {
     const window = this.choiceWindow;
     const pending = this.pendingUltimatum;
     if (!window || !pending || !this.closeChoice(window.id, at)) return;
     this.pendingUltimatum = null;
     const next = applyUltimatum(this.combatant(target, seat), pending.star, choice, this.round, window.id, this.rng);
     this.updateCombatant(target, seat, next);
+    if (timedOut) {
+      const { star, blocks, coinThreshold, coinPenalty, destroy, lockedRounds } = ultimatumView(pending.star, next.coins);
+      const effect = star === 1 ? (choice === 'accept' ? 'Vòng sau không thể mua thẻ.'
+        : `Vòng sau khóa tối đa ${blocks} ô Shop và không cấp lượt Reroll miễn phí của hệ thống.`)
+        : star === 2 ? (choice === 'accept' ? `Cuối vòng sau trừ ${coinPenalty} xu nếu còn từ ${coinThreshold} xu.`
+          : `Đã trừ ${coinPenalty} xu.`)
+          : (choice === 'accept' ? `Không thể dùng thẻ trong ${lockedRounds} vòng tiếp theo.`
+            : `Đã xử lý phá ngẫu nhiên tối đa ${destroy} thẻ Normal trong kho.`);
+      target.ultimatumTimeout = { round: this.round, star, choice, effect };
+    } else target.ultimatumTimeout = null;
     if (!pending.keepTurn) this.endAction(at);
   }
 
@@ -554,6 +586,7 @@ export class Room {
         canEndTurn: ownAction && (this.placed || this.usedCard),
         canBuy: !benchLocked && !hasDebuff(player.effects, 'buyLock', this.round),
         benchLocked,
+        ultimatumTimeout: player.ultimatumTimeout,
         wallsRemaining,
         hairTrigger: player.effects.hair && player.effects.hair.through >= this.round
           ? { from: player.effects.hair.from, through: player.effects.hair.through } : null,

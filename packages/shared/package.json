@@ -4,7 +4,8 @@
   "type": "module",
   "exports": {
     ".": "./src/protocol.ts",
-    "./timers": "./data/timers.json"
+    "./timers": "./data/timers.json",
+    "./network-metrics": "./src/network-metrics.ts"
   },
   "dependencies": {
     "zod": "^4.0.0"

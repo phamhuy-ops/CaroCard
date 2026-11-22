@@ -246,3 +246,42 @@
 - Trả lời nguyên văn: commit lên git và tiếp tục (sau khi làm hết t sẽ yêu cầu bạn tạo cho t 1 list check để kt toàn bộ dự án)
 - Quyết định: Commit M8 bằng tiếng Việt, đẩy nhánh main lên GitHub và tiếp tục sang P-02 của M9.
 - File bị ảnh hưởng: DECISIONS_LOG.md và các tệp triển khai M8.
+
+## 2026-11-22 — P-02 (M9)
+
+- Trả lời nguyên văn: A
+- Quyết định: Duyệt kế hoạch M9. Chờ D-09 để chốt demo qua LAN hay Internet.
+- File bị ảnh hưởng: DECISIONS_LOG.md.
+
+## 2026-11-22 — D-09 (M9)
+
+- Trả lời nguyên văn: A thử mạng LAN trước sau này t sẽ thử triển khai như game online kết nối internet là chơi đc
+- Quyết định: Demo M9 qua LAN trước. Demo qua Internet và HTTPS/WSS để sau.
+- File bị ảnh hưởng: apps/server/, apps/web/, packages/shared/, kịch bản demo và DECISIONS_LOG.md.
+
+## 2026-11-22 — A-05 (M9), đo trước trên máy chính
+
+- Trả lời nguyên văn: chọn A nhưng bạn có thể đo giúp t đc ko
+- Kết quả: Đã đo 20 mẫu mỗi cấu hình qua IP LAN của máy chính và proxy WebSocket. RTT p50/p95 (ms): 0 ms → 2/15; 100 ms → 218/222; 300 ms → 624/628; 100 ms và jitter ±40 ms → 218/252.
+- Còn chờ: Xác minh LAN trên thiết bị thứ hai và nối lại giữa popup.
+- File bị ảnh hưởng: DECISIONS_LOG.md.
+
+## 2026-11-22 — A-05 (M9), số đo điện thoại
+
+- Bằng chứng: Ảnh người dùng gửi từ điện thoại truy cập địa chỉ Wi-Fi của máy chính.
+- Kết quả: RTT p50 24 ms, p95 88 ms, 48 mẫu ở cấu hình không mô phỏng trễ.
+- Còn chờ: Đo thời gian khôi phục và xác minh nối lại giữa popup trên điện thoại.
+- File bị ảnh hưởng: DECISIONS_LOG.md và docs/M9_NETWORK_DEMO.md.
+
+## 2026-11-22 — A-05 (M9), thử nối lại trong ván
+
+- Trả lời nguyên văn: khi tắt mạng và kết nối lại thì đã hết time nên brutal **Ultimatum** đã hết thời gian nên t cũng ko bik xảy ra gì
+- Kết quả: Điện thoại nối lại thành công sau khi popup Brutal Ultimatum 1★ hết hạn. Log server ghi 10.952 ms từ lúc phát hiện mất kết nối tới lúc nhận lệnh khôi phục. Ảnh Shop cho thấy hai ô bị khóa, đúng nhánh Chống lại mặc định của D-12.
+- Điều chỉnh: Hiển thị lựa chọn mặc định và hiệu ứng sau timeout cho riêng người nhận.
+- File bị ảnh hưởng: DECISIONS_LOG.md, docs/M9_NETWORK_DEMO.md, apps/server/, apps/web/ và packages/shared/.
+
+## 2026-11-22 — P-05 (M9)
+
+- Trả lời nguyên văn: push lên git M9
+- Quyết định: Commit M9 bằng tiếng Việt và đẩy nhánh main lên GitHub.
+- File bị ảnh hưởng: DECISIONS_LOG.md và các tệp triển khai, kiểm thử, hướng dẫn demo M9.
