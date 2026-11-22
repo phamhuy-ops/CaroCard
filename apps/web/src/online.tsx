@@ -37,6 +37,7 @@ const errors: Record<string, string> = {
   ULTIMATUM_ACTIVE: 'Chờ Tối hậu thư trước hết hiệu lực.',
   INVALID_MOVE: 'Nước dời quân không hợp lệ.',
   INVALID_WALLS: 'Chọn đủ ô trống khác nhau và kiểm tra chỗ đặt tường còn lại.',
+  INVALID_SPECIAL_TARGET: 'Mục tiêu của thẻ đặc biệt không hợp lệ.',
 };
 
 const rarityLabels: Record<string, string> = {
@@ -99,7 +100,8 @@ function ShopPanel({ snapshot, disabled, command, onUse }: {
               {card.canUse && <button className="restart" disabled={disabled}
                 aria-label={`Dùng ${card.name} ở ô ${slot + 1}`}
                 onClick={() => onUse(slot)}>Dùng thẻ</button>}
-              {['BUF-R01', 'BUF-E01'].includes(card.id) && snapshot.phase === 'ACTION' && snapshot.turn === seat && !card.canUse &&
+              {((['BUF-R01', 'BUF-E01', 'SPC-02'].includes(card.id) && snapshot.phase === 'ACTION' && snapshot.turn === seat)
+                || (card.id === 'SPC-03' && snapshot.phase === 'PREPARATION')) && !card.canUse &&
                 <button className="restart" disabled>Dùng thẻ</button>}
               {card.id === 'BUF-E01' && <span>Chỗ đặt tường còn lại: {snapshot.you.wallsRemaining}</span>}
               {card.id === 'DEB-R01' && snapshot.ultimatumLocked &&
@@ -172,6 +174,7 @@ export function OnlineGame({ renderBoard }: {
   const [clock, setClock] = useState(() => performance.now());
   const [angle, setAngle] = useState<{ round: number; slot: number; from: Square | null } | null>(null);
   const [wall, setWall] = useState<{ round: number; slot: number; squares: Square[] } | null>(null);
+  const [special, setSpecial] = useState<{ round: number; slot: number; id: 'SPC-02' | 'SPC-03' } | null>(null);
 
   useEffect(() => {
     const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -292,9 +295,18 @@ export function OnlineGame({ renderBoard }: {
     canSelect: (row, col) => !disabled && snapshot.board[row * boardSize + col] === null
       && (building.squares.length < building.required || building.squares.some(square => square.row === row && square.col === col)),
   } : undefined;
+  const specialCard = special && snapshot?.round === special.round ? snapshot.you.privateState.bench[special.slot] : null;
+  const pickingSpecial = special && specialCard?.id === special.id && specialCard.canUse ? special : null;
+  const blastSelection: BoardSelection | undefined = pickingSpecial?.id === 'SPC-02' && snapshot ? {
+    selected: () => false,
+    canSelect: (row, col) => !disabled && snapshot.board[row * boardSize + col] === 'Makeshift Wall',
+  } : undefined;
 
   function clickBoard(row: number, col: number) {
-    if (building) {
+    if (pickingSpecial?.id === 'SPC-02') {
+      command({ type: 'useCard', slot: pickingSpecial.slot, blast: { row, col } });
+      setSpecial(null);
+    } else if (building) {
       const selected = building.squares.some(square => square.row === row && square.col === col);
       const squares = selected ? building.squares.filter(square => square.row !== row || square.col !== col)
         : [...building.squares, { row, col }];
@@ -398,14 +410,32 @@ export function OnlineGame({ renderBoard }: {
                 const { id } = snapshot.you.privateState.bench[slot];
                 setAngle(null);
                 setWall(null);
+                setSpecial(null);
                 if (id === 'BUF-R01') {
                   setAngle({ round: snapshot.round, slot, from: null });
                 } else if (id === 'BUF-E01') {
                   setWall({ round: snapshot.round, slot, squares: [] });
+                } else if (id === 'SPC-02' || id === 'SPC-03') {
+                  setSpecial({ round: snapshot.round, slot, id });
                 } else {
                   command({ type: 'useCard', slot });
                 }
               }} />
+              {pickingSpecial?.id === 'SPC-03' && <div className="room-actions" role="group" aria-label="Chọn thẻ để sao chép">
+                <p>Chọn thẻ để tạo bản sao 1★.</p>
+                {snapshot.you.privateState.bench.map((card, targetSlot) => card.mirrorTarget && (
+                  <button key={targetSlot} className="restart" disabled={disabled}
+                    onClick={() => {
+                      command({ type: 'mirror', round: snapshot.round, slot: pickingSpecial.slot, targetSlot });
+                      setSpecial(null);
+                    }}>{card.name} · {card.star}★ · ô {targetSlot + 1}</button>
+                ))}
+                <button className="restart" onClick={() => setSpecial(null)}>Hủy chọn</button>
+              </div>}
+              {pickingSpecial?.id === 'SPC-02' && <div className="room-actions">
+                <p role="status">Chọn tường Makeshift Wall để phá.</p>
+                <button className="restart" onClick={() => setSpecial(null)}>Hủy chọn</button>
+              </div>}
               {selecting && <div className="room-actions">
                 <p role="status">{selecting.from ? 'Chọn ô trống để dời quân.' : 'Chọn quân của bạn để dời.'}</p>
                 {selecting.from && <button className="restart"
@@ -421,7 +451,7 @@ export function OnlineGame({ renderBoard }: {
                   }}>Đặt tường</button>
                 <button className="restart" onClick={() => setWall(null)}>Hủy chọn</button>
               </div>}
-              {renderBoard(snapshot.board, !disabled && snapshot.you.canPlace, clickBoard, wallSelection ?? boardSelection,
+              {renderBoard(snapshot.board, !disabled && snapshot.you.canPlace, clickBoard, blastSelection ?? wallSelection ?? boardSelection,
                 snapshot.result?.kind === 'win' && snapshot.result.reason === 'fiveInRow' ? snapshot.result.winner : undefined)}
             </>
           )}

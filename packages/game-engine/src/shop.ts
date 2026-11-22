@@ -8,6 +8,7 @@ const normalRarities = ['common', 'rare', 'epic', 'legendary'] as const;
 const cards = new Map(catalog.map(card => [card.id, card]));
 const weights = Object.entries(constants.demonWeights);
 const { shop: shopRules, bench: benchRules, reroll: rerollRules } = constants;
+export const piggyBankId = 'INT-R01';
 
 export interface BenchCard {
   cardId: string;
@@ -22,6 +23,15 @@ export interface Shop {
   hold: boolean;
   freeRerolls: number;
   spentThisRound: boolean;
+}
+
+export function ownsPiggyBank(shop: Shop) {
+  return shop.bench.some(card => card.cardId === piggyBankId);
+}
+
+export function hideOwnedPiggyBank(shop: Shop): Shop {
+  if (!ownsPiggyBank(shop) || !shop.slots.includes(piggyBankId)) return shop;
+  return { ...shop, slots: shop.slots.map(id => id === piggyBankId ? null : id) };
 }
 
 type ShopError = 'SHOP_HELD' | 'NOT_ENOUGH_COINS' | 'SLOT_BLOCKED' | 'EMPTY_SLOT'
@@ -97,7 +107,7 @@ function rollDemons(demonP: number, rng: Rng) {
   return ids;
 }
 
-export function rollShop(round: number, rng: Rng, rarityStar = 0) {
+export function rollShop(round: number, rng: Rng, rarityStar = 0, excludePiggyBank = false) {
   const stage = shopOdds(round, rarityStar);
   const demonIds = rollDemons(stage.demonP, rng);
   const remaining = Array.from({ length: shopRules.slots }, (_, index) => index);
@@ -108,7 +118,8 @@ export function rollShop(round: number, rng: Rng, rarityStar = 0) {
     let roll = rng.next() * 100;
     const rarity = rarities.find(candidate => (roll -= stage[candidate]) < 0)
       ?? rarities.findLast(candidate => stage[candidate] > 0);
-    const eligible = catalog.filter(card => card.rarity === rarity && round >= (card.minRound ?? 1));
+    const eligible = catalog.filter(card => card.rarity === rarity && round >= (card.minRound ?? 1)
+      && (!excludePiggyBank || card.id !== piggyBankId));
     const card = eligible[Math.floor(rng.next() * eligible.length)];
     if (!card) throw new Error(`No eligible card for rarity ${rarity} in round ${round}`);
     return card;
@@ -122,11 +133,11 @@ export function grantRerolls(shop: Shop, amount: number): Shop {
 export function refreshShop(shop: Shop, round: number, rng: Rng, rarityStar = 0, grantSystemReroll = true): Shop {
   const next = grantRerolls(shop, (grantSystemReroll ? rerollRules.freePerRound : 0)
     + (rules.rarityUp.freeRerolls[rarityStar - 1] ?? 0));
-  if (!shop.hold) return { ...next, slots: rollShop(round, rng, rarityStar).map(card => card.id) };
+  if (!shop.hold) return { ...next, slots: rollShop(round, rng, rarityStar, ownsPiggyBank(shop)).map(card => card.id) };
 
   const expired: number[] = [];
   const empty: number[] = [];
-  const slots = shop.slots.map((id, index) => {
+  const slots = hideOwnedPiggyBank(shop).slots.map((id, index) => {
     if (id === null) empty.push(index);
     else if (cardDefinition(id).rarity === 'demon') {
       expired.push(index);
@@ -149,7 +160,7 @@ export function reroll(shop: Shop, coins: number, round: number, rng: Rng, rarit
     coins: coins - cost,
     shop: recordSpend({
       ...shop, freeRerolls: Math.max(0, shop.freeRerolls - 1),
-      slots: rollShop(round, rng, rarityStar).map(card => card.id),
+      slots: rollShop(round, rng, rarityStar, ownsPiggyBank(shop)).map(card => card.id),
     }, cost),
   };
 }
@@ -191,7 +202,7 @@ export function buy(shop: Shop, coins: number, index: number, round = 1): Transa
   if (shop.blocks[index] !== null) return { error: 'SLOT_BLOCKED' };
   const card = cardDefinition(id);
   const demon = card.rarity === 'demon';
-  if ((card.uniquePerBench || demon) && shop.bench.some(item => item.cardId === id)) {
+  if ((card.uniquePerBench || demon || id === piggyBankId) && shop.bench.some(item => item.cardId === id)) {
     return { error: 'CARD_ALREADY_OWNED' };
   }
   // Demon progression is introduced in M7. Every purchased Demon starts Locked.
@@ -205,7 +216,7 @@ export function buy(shop: Shop, coins: number, index: number, round = 1): Transa
   if (bench.length > benchRules.slots) return { error: 'BENCH_FULL' };
   const slots = [...shop.slots];
   slots[index] = null;
-  return { coins: coins - card.cost, shop: recordSpend({ ...shop, slots, bench }, card.cost) };
+  return { coins: coins - card.cost, shop: recordSpend(hideOwnedPiggyBank({ ...shop, slots, bench }), card.cost) };
 }
 
 function recordSpend(shop: Shop, cost: number): Shop {

@@ -1,6 +1,6 @@
 import config from '../data/normal-cards.json' with { type: 'json' };
 import constants from '../../../spec/data/constants.json' with { type: 'json' };
-import { activateBlock, cardDefinition, mergeBench, releaseBlock } from './shop.ts';
+import { activateBlock, cardDefinition, hideOwnedPiggyBank, mergeBench, ownsPiggyBank, piggyBankId, releaseBlock } from './shop.ts';
 import type { BenchCard, Shop } from './shop.ts';
 import type { DebuffSource, NormalEffects } from './normal.ts';
 import type { Rng } from './rng.ts';
@@ -46,7 +46,7 @@ function remove(bench: readonly BenchCard[], indices: readonly number[]) {
 }
 
 function withBench(player: Combatant, bench: BenchCard[]): Combatant {
-  return { ...player, shop: { ...player.shop, bench } };
+  return { ...player, shop: hideOwnedPiggyBank({ ...player.shop, bench }) };
 }
 
 function changeStars(bench: readonly BenchCard[], indices: number[], update: (star: number) => number) {
@@ -141,7 +141,9 @@ function bargain(star: number, attacker: Combatant, target: Combatant, round: nu
       if (targetBench.length >= constants.bench.slots) targetBench = remove(targetBench, pick(targetBench, normal, 1, rng));
       if (targetBench.length < constants.bench.slots) targetBench = mergeBench([...targetBench, gift], gift.cardId);
     }
-    const [rareIndex] = pick(targetBench, card => cardDefinition(card.cardId).rarity === 'rare', 1, rng);
+    const alreadyOwnsPiggy = ownsPiggyBank(attacker.shop);
+    const [rareIndex] = pick(targetBench, card => cardDefinition(card.cardId).rarity === 'rare'
+      && (!alreadyOwnsPiggy || card.cardId !== piggyBankId), 1, rng);
     if (rareIndex !== undefined) {
       const rare = targetBench[rareIndex];
       targetBench = remove(targetBench, [rareIndex]);

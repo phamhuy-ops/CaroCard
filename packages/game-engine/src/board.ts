@@ -170,3 +170,13 @@ export function placeMakeshiftWalls(game: Game, star: number, squares: readonly 
   for (const { row, col } of squares) wallOwners[row * size + col] = game.turn;
   return { ...game, board, result, wallOwners };
 }
+
+export function blastMakeshiftWall(game: Game, { row, col }: Square): Game | null {
+  const index = row * size + col;
+  if (game.result || !inBounds(row, col) || game.board[index] !== 'Makeshift Wall') return null;
+  const board = [...game.board];
+  board[index] = null;
+  const wallOwners = { ...game.wallOwners };
+  delete wallOwners[index];
+  return { ...game, board, wallOwners };
+}

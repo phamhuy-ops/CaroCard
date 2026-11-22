@@ -1,11 +1,12 @@
 import { randomBytes, randomInt, randomUUID } from 'node:crypto';
-import { boardSize, createGame, moveWithNewAngle, newAngleTargets, placeMakeshiftWalls, placeTurn,
+import { blastMakeshiftWall, boardSize, createGame, moveWithNewAngle, newAngleTargets, placeMakeshiftWalls, placeTurn,
   remainingWallCapacity, wallsForStar } from '@carocard/game-engine';
 import { createRng } from '@carocard/game-engine/rng';
 import type { Rng } from '@carocard/game-engine/rng';
 import { advanceInterest, buy, canDiscard, cardDefinition, createShop, discard, refreshShop, reroll } from '@carocard/game-engine/shop';
 import type { Shop } from '@carocard/game-engine/shop';
-import { activateNormal, canPairWithMark, canUseNormal, createNormalEffects, timedEffectActive } from '@carocard/game-engine/normal';
+import { activateNormal, canPairWithMark, canUseActionCard, createNormalEffects, timedEffectActive } from '@carocard/game-engine/normal';
+import { isMirrorTarget, mirrorImage } from '@carocard/game-engine/special';
 import type { NormalEffects } from '@carocard/game-engine/normal';
 import { applyDebuff, applyUltimatum, canResistUltimatum, endDebuffRound, hasDebuff, startDebuffRound, ultimatumView } from '@carocard/game-engine/debuff';
 import type { UltimatumChoice } from '@carocard/game-engine/debuff';
@@ -335,6 +336,9 @@ export class Room {
     const canUseCard = ownAction && !this.usedCard && !hasDebuff(player.effects, 'cardLock', this.round);
     const wallsRemaining = player.seat ? remainingWallCapacity(this.game, player.seat) : 0;
     const emptySquares = this.game.board.filter(cell => cell === null).length;
+    const canUseMirror = player.seat !== null && this.preparation?.[player.seat].ready === false
+      && this.round >= (cardDefinition('SPC-03').minRound ?? 1) && bench.some(isMirrorTarget);
+    const hasMakeshiftWall = this.game.board.includes('Makeshift Wall');
     const ownWindow = this.choiceWindow && this.choiceWindow.seat === player.seat ? { ...this.choiceWindow } : null;
     return {
       roomCode: this.code,
@@ -366,16 +370,22 @@ export class Room {
           ? { from: player.effects.hair.from, through: player.effects.hair.through } : null,
         privateState: {
           shop: slots.map((id, index) => ({ card: id === null ? null : cardView(id), blocked: blocks[index] !== null })),
-          bench: bench.map(({ cardId, star, piggy }) => ({
-            ...cardView(cardId), star, canDiscard: canDiscard(cardId),
-            canUse: canUseCard && canUseNormal(cardId) && (!this.placed || canPairWithMark(cardId))
-              && (cardId !== 'DEB-R01' || !this.ultimatumLocked)
-              && (cardId !== 'BUF-R01' || this.game.board.some((cell, index) =>
-                cell === this.game.turn && newAngleTargets(this.game.board, this.game.turn, star,
-                  { row: Math.floor(index / boardSize), col: index % boardSize }).length > 0))
-              && (cardId !== 'BUF-E01' || wallsForStar(star) <= Math.min(wallsRemaining, emptySquares)),
-            piggy: piggy && { noSpendRounds: piggy.noSpendRounds, totalEarned: piggy.totalEarned },
-          })),
+          bench: bench.map(card => {
+            const { cardId, star, piggy } = card;
+            return {
+              ...cardView(cardId), star, canDiscard: canDiscard(cardId),
+              mirrorTarget: isMirrorTarget(card),
+              canUse: cardId === 'SPC-03' ? canUseMirror
+                : canUseCard && canUseActionCard(cardId) && (!this.placed || canPairWithMark(cardId))
+                && (cardId !== 'DEB-R01' || !this.ultimatumLocked)
+                && (cardId !== 'SPC-02' || hasMakeshiftWall)
+                && (cardId !== 'BUF-R01' || this.game.board.some((cell, index) =>
+                  cell === this.game.turn && newAngleTargets(this.game.board, this.game.turn, star,
+                    { row: Math.floor(index / boardSize), col: index % boardSize }).length > 0))
+                && (cardId !== 'BUF-E01' || wallsForStar(star) <= Math.min(wallsRemaining, emptySquares)),
+              piggy: piggy && { noSpendRounds: piggy.noSpendRounds, totalEarned: piggy.totalEarned },
+            };
+          }),
           hold, freeRerolls, curseProgress: { ...curseProgress }, transactions: [...transactions],
         },
       },
@@ -408,6 +418,12 @@ export class Room {
       const seat = player.seat;
       if (!this.preparation || !seat || command.round !== this.round) return ErrorCode.WrongPhase;
       if (this.preparation[seat].ready) return ErrorCode.AlreadyReady;
+      if (command.type === 'mirror') {
+        const next = mirrorImage(player.shop, command.slot, command.targetSlot, this.round);
+        if (!next) return ErrorCode.InvalidSpecialTarget;
+        player.shop = next;
+        return;
+      }
       if (command.type === 'buy' && hasDebuff(player.effects, 'buyLock', this.round)) return ErrorCode.BuyLocked;
       if (command.type === 'toggleHold') {
         player.shop = { ...player.shop, hold: !player.shop.hold };
@@ -449,16 +465,20 @@ export class Room {
       const card = player.shop.bench[command.slot];
       if (!card) return ErrorCode.EmptySlot;
       if (card.cardId === 'DEB-R01' && this.ultimatumLocked) return ErrorCode.UltimatumActive;
-      if (!canUseNormal(card.cardId) || (this.placed && !canPairWithMark(card.cardId))) return ErrorCode.CannotUseCard;
+      if (!canUseActionCard(card.cardId) || (this.placed && !canPairWithMark(card.cardId))) return ErrorCode.CannotUseCard;
       const isNewAngle = card.cardId === 'BUF-R01';
       const isMakeshiftWall = card.cardId === 'BUF-E01';
+      const isPowderKeg = card.cardId === 'SPC-02';
       if (isNewAngle !== Boolean(command.move)) return ErrorCode.InvalidMove;
       if (isMakeshiftWall !== Boolean(command.walls)) return ErrorCode.InvalidWalls;
+      if (isPowderKeg !== Boolean(command.blast)) return ErrorCode.InvalidSpecialTarget;
       const moved = command.move && moveWithNewAngle(this.game, card.star, command.move.from, command.move.to);
       if (isNewAngle && !moved) return ErrorCode.InvalidMove;
       const built = command.walls && placeMakeshiftWalls(this.game, card.star, command.walls);
       if (isMakeshiftWall && !built) return ErrorCode.InvalidWalls;
-      const boardAction = moved || built;
+      const blasted = command.blast && blastMakeshiftWall(this.game, command.blast);
+      if (isPowderKeg && !blasted) return ErrorCode.InvalidSpecialTarget;
+      const boardAction = moved || built || blasted;
       const definition = cardDefinition(card.cardId);
       const keepTurn = !this.placed && (isMakeshiftWall || (hairActive && canPairWithMark(card.cardId)));
       player.shop = { ...player.shop, bench: player.shop.bench.filter((_, index) => index !== command.slot) };

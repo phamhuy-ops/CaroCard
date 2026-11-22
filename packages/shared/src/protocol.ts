@@ -20,6 +20,11 @@ export const commandSchema = z.discriminatedUnion('type', [
     ...commandFields, type: z.literal('useCard'), slot: z.int().nonnegative(),
     move: z.strictObject({ from: squareSchema, to: squareSchema }).optional(),
     walls: z.array(squareSchema).optional(),
+    blast: squareSchema.optional(),
+  }),
+  z.strictObject({
+    ...commandFields, type: z.literal('mirror'), round: z.int().positive(), slot: z.int().nonnegative(),
+    targetSlot: z.int().nonnegative(),
   }),
   z.strictObject({ ...commandFields, type: z.literal('endTurn') }),
   z.strictObject({ ...commandFields, type: z.literal('answerUltimatum'), windowId: z.uuid(), choice: z.enum(['accept', 'resist']) }),
@@ -80,6 +85,7 @@ export const ErrorCode = {
   UltimatumActive: 'ULTIMATUM_ACTIVE',
   InvalidMove: 'INVALID_MOVE',
   InvalidWalls: 'INVALID_WALLS',
+  InvalidSpecialTarget: 'INVALID_SPECIAL_TARGET',
 } as const;
 
 export type ErrorCode = typeof ErrorCode[keyof typeof ErrorCode];
@@ -97,6 +103,7 @@ export interface PrivateState {
     star: number;
     canDiscard: boolean;
     canUse: boolean;
+    mirrorTarget: boolean;
     piggy?: { noSpendRounds: number; totalEarned: number };
   })[];
   hold: boolean;

@@ -38,12 +38,12 @@ export function timedEffectActive(effect: TimedEffect | null, round: number) {
   return effect !== null && round >= effect.from && round <= effect.through;
 }
 
-export function canUseNormal(cardId: string) {
-  return ['INT-C01', 'BUF-C01', 'BUF-C02', 'BUF-R01', 'BUF-E01', 'BUF-L01', 'DEB-C01', 'DEB-C02', 'DEB-R01', 'DEB-R02', 'DEB-E01', 'DEB-L01'].includes(cardId);
+export function canUseActionCard(cardId: string) {
+  return ['INT-C01', 'BUF-C01', 'BUF-C02', 'BUF-R01', 'BUF-E01', 'BUF-L01', 'DEB-C01', 'DEB-C02', 'DEB-R01', 'DEB-R02', 'DEB-E01', 'DEB-L01', 'SPC-02'].includes(cardId);
 }
 
 export function canPairWithMark(cardId: string) {
-  return ['INT-C01', 'BUF-R01', 'BUF-E01', 'BUF-L01', 'DEB-C02', 'DEB-R01', 'DEB-R02', 'DEB-E01', 'DEB-L01'].includes(cardId);
+  return ['INT-C01', 'BUF-R01', 'BUF-E01', 'BUF-L01', 'DEB-C02', 'DEB-R01', 'DEB-R02', 'DEB-E01', 'DEB-L01', 'SPC-02'].includes(cardId);
 }
 
 export function activateNormal(card: BenchCard, shop: Shop, effects: NormalEffects, round: number, rng: Rng) {

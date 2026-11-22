@@ -219,3 +219,42 @@ test.each(['alone', 'wall-first', 'mark-first'])('Makeshift Wall allows exactly 
   ] }).error).toBe('INVALID_WALLS');
   expect(x.shop.bench).toHaveLength(2);
 });
+
+test('Mirror Image copies privately during preparation without using the upcoming turn', () => {
+  const { room, x, o, send, ready } = setup();
+  x.shop.bench = [{ cardId: 'SPC-03', star: 0 }, { cardId: 'BUF-C01', star: 2 }, { cardId: 'INT-R01', star: 1 }];
+  expect(send(x, { type: 'mirror', round: 1, slot: 0, targetSlot: 1 }).error).toBe('INVALID_SPECIAL_TARGET');
+  for (let round = 1; round < 5; round++) {
+    ready();
+    send(x, { type: 'place', row: 0, col: round * 2 });
+    send(o, { type: 'place', row: 1, col: round * 2 });
+  }
+  expect(room.snapshot(x).you.privateState.bench[0].canUse).toBe(true);
+  expect(send(x, { type: 'mirror', round: 5, slot: 0, targetSlot: 2 }).error).toBe('INVALID_SPECIAL_TARGET');
+  expect(send(x, { type: 'mirror', round: 5, slot: 0, targetSlot: 1 }).error).toBeUndefined();
+  expect(x.shop.bench.map(({ cardId, star }) => [cardId, star])).toEqual([
+    ['BUF-C01', 1], ['BUF-C01', 2], ['INT-R01', 1],
+  ]);
+  expect(room.snapshot(o).you.privateState.bench).toEqual([]);
+  ready();
+  expect(room.snapshot(x)).toMatchObject({ phase: 'ACTION', turn: 'X', you: { canPlace: true } });
+});
+
+test('Powder Keg validates its target and Hair-Trigger permits marking the opened square', () => {
+  const { room, x, o, send, ready } = setup();
+  o.shop.bench = [{ cardId: 'BUF-E01', star: 1 }];
+  x.shop.bench = [{ cardId: 'SPC-02', star: 0 }];
+  ready();
+  expect(room.snapshot(x).you.privateState.bench[0].canUse).toBe(false);
+  send(x, { type: 'place', row: 0, col: 0 });
+  send(o, { type: 'useCard', slot: 0, walls: [{ row: 1, col: 1 }] });
+  send(o, { type: 'place', row: 1, col: 0 });
+  x.effects.hair = { star: 1, from: 2, through: 2 };
+  ready();
+  expect(send(x, { type: 'useCard', slot: 0, blast: { row: 1, col: 0 } }).error).toBe('INVALID_SPECIAL_TARGET');
+  expect(x.shop.bench).toHaveLength(1);
+  expect(send(x, { type: 'useCard', slot: 0, blast: { row: 1, col: 1 } }).error).toBeUndefined();
+  expect(room.snapshot(o).you.wallsRemaining).toBe(3);
+  expect(send(x, { type: 'place', row: 1, col: 1 }).error).toBeUndefined();
+  expect(room.snapshot(o)).toMatchObject({ phase: 'ACTION', turn: 'O' });
+});

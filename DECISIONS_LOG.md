@@ -179,3 +179,22 @@
 - Trả lời nguyên văn: Ok vậy là đc ko cần thử đâu tiếp tục push lên git
 - Quyết định: Nghiệm thu M5c dựa trên kết quả kiểm tra hiện có, không yêu cầu thêm lượt chơi thử thủ công. Tạo commit tiếng Việt và đẩy nhánh main lên GitHub.
 - File bị ảnh hưởng: DECISIONS_LOG.md và các tệp triển khai M5c.
+
+## 2026-11-22 — P-02 và cập nhật Piggy Bank (M6)
+
+- Trả lời nguyên văn: A à ngoài ra Piggy Bank khi mua thẻ thì chỉ có thể mua 1 thẻ duy nhất và thẻ piggy khi đã có trong kho thì ko xh trong shop và ko thể nhận đc thêm nữa nha vì piggy bank đã tự nâng cấp đc ko cần ghép sao
+- Quyết định: Duyệt M6. Tối đa một Piggy Bank trên mỗi Bench. Khi đang sở hữu, bỏ các bản Piggy Bank khỏi Shop hiện tại và lần roll mới, đồng thời loại bản thứ hai khỏi các mục tiêu chuyển giao.
+- D-04: Ghi nhận theo roadmap, giữ nguyên giá hiện tại và tối đa một bản của từng Special trên mỗi Bench.
+- File bị ảnh hưởng: packages/game-engine/, packages/shared/, apps/server/, apps/web/ và DECISIONS_LOG.md.
+
+## 2026-11-22 — Nghiệm thu M6
+
+- Trả lời nguyên văn: OK đã ổn nha
+- Quyết định: Nghiệm thu M6. Ảnh thử cho thấy Powder Keg phá đúng một tường và Mirror Image tạo thêm Aurelia Pocket 1★.
+- File bị ảnh hưởng: DECISIONS_LOG.md.
+
+## 2026-11-22 — P-05 (M6)
+
+- Trả lời nguyên văn: Ok đẩy lên git giúp t bản M6
+- Quyết định: Tạo commit M6 bằng tiếng Việt và đẩy nhánh main lên GitHub.
+- File bị ảnh hưởng: DECISIONS_LOG.md và các tệp triển khai M6.
