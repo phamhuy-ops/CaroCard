@@ -99,7 +99,8 @@ test('unique cards, locked Demon cap and Piggy Bank rules are enforced', () => {
   expect(buy(shop, 9, 1)).toEqual({ error: 'CARD_ALREADY_OWNED' });
   expect(buy(shop, 9, 2)).toEqual({ error: 'DEMON_LIMIT' });
   expect(buy(shop, 9, 3)).toEqual({ error: 'BENCH_FULL' });
-  expect(discard(shop, 9, 3)).toEqual({ error: 'CANNOT_DISCARD' });
+  expect(discard(shop, 9, 1)).toEqual({ error: 'CANNOT_DISCARD' });
+  expect(discard(shop, 9, 3)).toMatchObject({ coins: 9 });
   const dropped = discard(shop, 9, 0);
   if ('error' in dropped) throw new Error(dropped.error);
   expect(dropped.coins).toBe(9);

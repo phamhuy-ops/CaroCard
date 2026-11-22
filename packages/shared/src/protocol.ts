@@ -14,6 +14,8 @@ export const commandSchema = z.discriminatedUnion('type', [
   z.strictObject({ ...commandFields, type: z.literal('toss') }),
   z.strictObject({ ...commandFields, type: z.literal('start') }),
   z.strictObject({ ...commandFields, type: z.literal('ready') }),
+  z.strictObject({ ...commandFields, type: z.literal('useCard'), slot: z.int().nonnegative() }),
+  z.strictObject({ ...commandFields, type: z.literal('endTurn') }),
   z.strictObject({ ...commandFields, type: z.literal('toggleHold'), round: z.int().positive() }),
   z.strictObject({ ...commandFields, type: z.literal('reroll'), round: z.int().positive() }),
   z.strictObject({ ...commandFields, type: z.literal('buy'), round: z.int().positive(), slot: z.int().nonnegative() }),
@@ -63,6 +65,8 @@ export const ErrorCode = {
   CardAlreadyOwned: 'CARD_ALREADY_OWNED',
   DemonLimit: 'DEMON_LIMIT',
   CannotDiscard: 'CANNOT_DISCARD',
+  CannotUseCard: 'CANNOT_USE_CARD',
+  ActionUsed: 'ACTION_USED',
 } as const;
 
 export type ErrorCode = typeof ErrorCode[keyof typeof ErrorCode];
@@ -76,7 +80,12 @@ export interface CardView {
 
 export interface PrivateState {
   shop: { card: CardView | null; blocked: boolean }[];
-  bench: (CardView & { star: number; canDiscard: boolean })[];
+  bench: (CardView & {
+    star: number;
+    canDiscard: boolean;
+    canUse: boolean;
+    piggy?: { noSpendRounds: number; totalEarned: number };
+  })[];
   hold: boolean;
   freeRerolls: number;
   curseProgress: Record<string, number>;
@@ -116,10 +125,11 @@ export interface Snapshot {
   preparation: Record<Seat, Preparation> | null;
   actionDeadline: number | null;
   choiceWindow: ChoiceWindow | null;
+  lastCard: { seat: Seat; name: string } | null;
   turn: Seat | null;
   result: { kind: 'win'; winner: Seat; reason: 'hellsDealer' | 'fiveInRow' | 'disconnect' }
     | { kind: 'draw' | 'cancelled' } | null;
-  you: PublicPlayer & { privateState: PrivateState };
+  you: PublicPlayer & { privateState: PrivateState; canPlace: boolean; canEndTurn: boolean };
 }
 
 export interface CommandResult {

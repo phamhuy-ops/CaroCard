@@ -90,9 +90,9 @@ export function createGame(): Game {
   return { board: Array<Cell>(cells).fill(null), turn: 'X', result: null };
 }
 
-export function placeTurn(game: Game, row: number, col: number): Game {
+export function placeTurn(game: Game, row: number, col: number, keepTurn = false): Game {
   if (game.result) return game;
   const { board, result } = resolvePlacements(game.board, [{ row, col, cell: game.turn }]);
   if (board === game.board) return game;
-  return { board, result, turn: result ? game.turn : game.turn === 'X' ? 'O' : 'X' };
+  return { board, result, turn: result || keepTurn ? game.turn : game.turn === 'X' ? 'O' : 'X' };
 }

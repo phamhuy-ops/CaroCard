@@ -1,0 +1,29 @@
+{
+  "source": "spec/rules/05_normal_cards.md",
+  "aurelia": {
+    "coins": [3, 5, 12],
+    "freeRerolls": [0, 1, 2]
+  },
+  "piggy": {
+    "roundsPerReward": 2,
+    "coins": [1, 2, 3],
+    "returnFraction": 0.5,
+    "minimumReturnWhenEarned": 1
+  },
+  "rarityUp": {
+    "duration": 2,
+    "boosts": [
+      { "rare": 15 },
+      { "epic": 18, "legendary": 5 },
+      { "legendary": 20 }
+    ],
+    "freeRerolls": [0, 0, 1]
+  },
+  "hairTrigger": {
+    "duration": [1, 2, 3]
+  },
+  "angel": {
+    "firstStarCleanseLimit": 2,
+    "immuneAtStar": 3
+  }
+}

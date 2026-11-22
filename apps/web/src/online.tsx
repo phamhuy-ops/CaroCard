@@ -27,6 +27,8 @@ const errors: Record<string, string> = {
   CARD_ALREADY_OWNED: 'Bạn đã có thẻ này trong kho.',
   DEMON_LIMIT: 'Bạn đã có tối đa hai Demon đang khóa.',
   CANNOT_DISCARD: 'Thẻ này không thể vứt từ kho.',
+  CANNOT_USE_CARD: 'Không thể dùng thẻ này lúc này.',
+  ACTION_USED: 'Bạn đã thực hiện thao tác này trong lượt.',
 };
 
 const rarityLabels: Record<string, string> = {
@@ -47,6 +49,7 @@ function ShopPanel({ snapshot, disabled, command }: {
 
   return (
     <section className="shop-panel" aria-label="Shop và kho bài của bạn">
+      {snapshot.preparation && <>
       <div className="shop-header">
         <h2>Shop</h2>
         <div className="room-actions">
@@ -71,6 +74,7 @@ function ShopPanel({ snapshot, disabled, command }: {
           </li>
         ))}
       </ul>
+      </>}
       <h2>Kho bài</h2>
       {bench.length === 0 ? <p>Kho trống</p> : (
         <ul className="bench-list">
@@ -78,9 +82,13 @@ function ShopPanel({ snapshot, disabled, command }: {
             <li className="shop-card" key={slot}>
               <strong>{card.name}{card.star > 0 ? ` · ${card.star}★` : ''}</strong>
               <span>{card.rarity === 'demon' ? 'Demon · Đang khóa' : rarityLabels[card.rarity]}</span>
-              {card.canDiscard && <button className="restart" disabled={!canTrade}
-                aria-label={`Vứt ${card.name} ở ô ${slot + 1}`}
-                onClick={() => command({ type: 'discard', round, slot })}>Vứt</button>}
+              {card.piggy && <span>Chuỗi tiết kiệm: {card.piggy.noSpendRounds} · Đã sinh {card.piggy.totalEarned} xu</span>}
+              {snapshot.preparation && card.canDiscard && <button className="restart" disabled={!canTrade}
+                aria-label={`${card.piggy ? 'Đập heo' : 'Vứt'} ${card.name} ở ô ${slot + 1}`}
+                onClick={() => command({ type: 'discard', round, slot })}>{card.piggy ? 'Đập heo' : 'Vứt'}</button>}
+              {card.canUse && <button className="restart" disabled={disabled}
+                aria-label={`Dùng ${card.name} ở ô ${slot + 1}`}
+                onClick={() => command({ type: 'useCard', slot })}>Dùng thẻ</button>}
             </li>
           ))}
         </ul>
@@ -259,6 +267,7 @@ export function OnlineGame({ renderBoard }: {
           ) : (
             <>
               <p>Vòng {snapshot.round} · X: {snapshot.coins.X} xu · O: {snapshot.coins.O} xu</p>
+              {snapshot.lastCard && <p>{snapshot.lastCard.seat} đã dùng {snapshot.lastCard.name}.</p>}
               {snapshot.preparation && snapshot.you.seat && (
                 <div className="room-actions">
                   <span>Chuẩn bị · {(['X', 'O'] as const).map(seat => {
@@ -275,11 +284,13 @@ export function OnlineGame({ renderBoard }: {
               {snapshot.phase === 'ACTION' && <p>Lượt của {snapshot.turn}{snapshot.actionDeadline !== null
                 ? ` · ${seconds(snapshot.actionDeadline)} giây`
                 : snapshot.choiceWindow ? ` · Còn ${seconds(snapshot.choiceWindow.deadline)} giây để chọn` : ' · Đang chờ lựa chọn'}</p>}
-              {snapshot.preparation && <ShopPanel snapshot={snapshot} disabled={disabled} command={command} />}
-              {renderBoard(snapshot.board, !disabled && snapshot.phase === 'ACTION'
-                && snapshot.actionDeadline !== null && snapshot.turn === snapshot.you.seat,
+              {snapshot.you.canEndTurn && <div className="room-actions">
+                <button className="restart" disabled={disabled}
+                  onClick={() => command({ type: 'endTurn' })}>Kết thúc lượt</button>
+              </div>}
+              <ShopPanel snapshot={snapshot} disabled={disabled} command={command} />
+              {renderBoard(snapshot.board, !disabled && snapshot.you.canPlace,
                 (row, col) => command({ type: 'place', row, col }))}
-              {!snapshot.preparation && <ShopPanel snapshot={snapshot} disabled={disabled} command={command} />}
             </>
           )}
         </>

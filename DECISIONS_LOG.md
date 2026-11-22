@@ -114,3 +114,26 @@
 - Trả lời nguyên văn: M4 commit lên
 - Quyết định: Tạo commit M4 bằng tiếng Việt và đẩy nhánh main lên GitHub.
 - File bị ảnh hưởng: DECISIONS_LOG.md và các tệp triển khai M4.
+
+## 2026-11-21 — P-02 (M5a)
+
+- Trả lời nguyên văn: A
+- Quyết định: Duyệt triển khai năm thẻ M5a.
+- File bị ảnh hưởng: packages/game-engine/, packages/shared/, apps/server/, apps/web/ và DECISIONS_LOG.md.
+
+## 2026-11-21 — D-11 (M5a)
+
+- Ghi nhận theo roadmap: Playtest combo Hair-Trigger + Aurelia Pocket hoặc Cutpurse. Giữ luật hiện tại trong M5a.
+- File bị ảnh hưởng: DECISIONS_LOG.md.
+
+## 2026-11-22 — Nghiệm thu M5a
+
+- Trả lời nguyên văn: Ok đã hoạt động
+- Quyết định: Xác nhận M5a sau khi chơi thử. Ảnh trước và sau khi dùng Aurelia Pocket 1★ cho thấy X tăng từ 1 lên 4 xu, thẻ rời kho và lượt chuyển sang O.
+- File bị ảnh hưởng: DECISIONS_LOG.md.
+
+## 2026-11-22 — P-05 (M5a)
+
+- Trả lời nguyên văn: push lên git
+- Quyết định: Tạo commit M5a bằng tiếng Việt và đẩy nhánh main lên GitHub.
+- File bị ảnh hưởng: DECISIONS_LOG.md và các tệp triển khai M5a.

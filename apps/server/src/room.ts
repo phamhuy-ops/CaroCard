@@ -2,8 +2,10 @@ import { randomBytes, randomInt, randomUUID } from 'node:crypto';
 import { boardSize, createGame, placeTurn } from '@carocard/game-engine';
 import { createRng } from '@carocard/game-engine/rng';
 import type { Rng } from '@carocard/game-engine/rng';
-import { buy, canDiscard, cardDefinition, createShop, discard, refreshShop, reroll } from '@carocard/game-engine/shop';
+import { advanceInterest, buy, canDiscard, cardDefinition, createShop, discard, refreshShop, reroll } from '@carocard/game-engine/shop';
 import type { Shop } from '@carocard/game-engine/shop';
+import { activateNormal, canPairWithMark, canUseNormal, createNormalEffects, timedEffectActive } from '@carocard/game-engine/normal';
+import type { NormalEffects } from '@carocard/game-engine/normal';
 import { ErrorCode, gameConstants } from '@carocard/shared';
 import type { ChoiceWindow, Command, CommandResult, Face, Phase, Preparation, PrivateState, Seat, Snapshot } from '@carocard/shared';
 
@@ -24,6 +26,7 @@ export interface Player {
   face: Face | null;
   seat: Seat | null;
   shop: Shop;
+  effects: NormalEffects;
   privateState: Pick<PrivateState, 'curseProgress' | 'transactions'>;
   commands: Map<string, CommandResult>;
   holdUntil: number | null;
@@ -52,6 +55,9 @@ export class Room {
   private round = 0;
   private coins = { ...startCoins };
   private connectionResult: Snapshot['result'] = null;
+  private placed = false;
+  private usedCard = false;
+  private lastCard: Snapshot['lastCard'] = null;
 
   readonly code: string;
   private readonly tossCoin: () => Face;
@@ -86,6 +92,7 @@ export class Room {
       face: null,
       seat: null,
       shop: createShop(),
+      effects: createNormalEffects(),
       privateState: { curseProgress: {}, transactions: [] },
       commands: new Map(),
       holdUntil: null,
@@ -149,9 +156,13 @@ export class Room {
       } else if (this.choiceWindow?.deadline === deadline) {
         this.closeChoice(this.choiceWindow.id, deadline);
       } else if (this.actionDeadline === deadline) {
-        const free = this.game.board.flatMap((cell, index) => cell === null ? [index] : []);
-        const index = free[Math.floor(this.rng.next() * free.length)];
-        this.place(Math.floor(index / boardSize), index % boardSize, deadline);
+        if (this.placed || this.usedCard) {
+          this.endAction(deadline);
+        } else {
+          const free = this.game.board.flatMap((cell, index) => cell === null ? [index] : []);
+          const index = free[Math.floor(this.rng.next() * free.length)];
+          this.place(Math.floor(index / boardSize), index % boardSize, deadline, false);
+        }
         this.revision++;
       }
     }
@@ -193,17 +204,36 @@ export class Room {
     this.actionDeadline = at + timersMs.action;
   }
 
-  private place(row: number, col: number, at: number) {
-    const next = placeTurn(this.game, row, col);
+  private place(row: number, col: number, at: number, hairActive: boolean) {
+    const next = placeTurn(this.game, row, col, true);
     if (next === this.game) return ErrorCode.InvalidCell;
     this.game = next;
     if (next.result) {
       this.finish();
-    } else if (next.turn === 'X') {
+    } else if (hairActive && !this.usedCard) {
+      this.placed = true;
+    } else {
+      this.endAction(at);
+    }
+  }
+
+  private endAction(at: number) {
+    this.placed = false;
+    this.usedCard = false;
+    this.game = { ...this.game, turn: this.game.turn === 'X' ? 'O' : 'X' };
+    if (this.game.turn === 'X') {
       this.phase = 'ROUND_END';
       for (const step of roundEndOrder) {
         for (const seat of seats) {
           if (step === 'coin+1') this.coins[seat] += coinsPerRound;
+          if (step === 'interest') {
+            const player = this.players.find(player => player.seat === seat);
+            if (player) {
+              const interest = advanceInterest(player.shop, this.round);
+              player.shop = interest.shop;
+              this.coins[seat] += interest.coins;
+            }
+          }
           this.roundEndStep?.(step, seat);
           if (step === 'shopRefreshAndReroll') this.refreshSeatShop(seat, this.round + 1);
         }
@@ -216,7 +246,12 @@ export class Room {
 
   private refreshSeatShop(seat: Seat, round: number) {
     const player = this.players.find(player => player.seat === seat);
-    if (player) player.shop = refreshShop(player.shop, round, this.shopRng[seat]);
+    if (player) player.shop = refreshShop(player.shop, round, this.shopRng[seat], this.rarityStar(player, round));
+  }
+
+  private rarityStar(player: Player, round: number) {
+    const effect = player.effects.rarity;
+    return effect && timedEffectActive(effect, round) ? effect.star : 0;
   }
 
   openChoice(seat: Seat, kind: ChoiceWindow['kind'], at: number) {
@@ -243,6 +278,7 @@ export class Room {
   snapshot(player: Player): Snapshot {
     const { curseProgress, transactions } = player.privateState;
     const { slots, bench, blocks, hold, freeRerolls } = player.shop;
+    const ownAction = this.phase === 'ACTION' && !this.choiceWindow && player.seat === this.game.turn;
     return {
       roomCode: this.code,
       phase: this.phase,
@@ -256,13 +292,20 @@ export class Room {
       preparation: this.preparation && { X: { ...this.preparation.X }, O: { ...this.preparation.O } },
       actionDeadline: this.actionDeadline,
       choiceWindow: this.choiceWindow && this.choiceWindow.seat === player.seat ? { ...this.choiceWindow } : null,
+      lastCard: this.lastCard,
       turn: this.phase === 'ACTION' ? this.game.turn : null,
       result: this.game.result ?? this.connectionResult,
       you: {
         ...publicPlayer(player),
+        canPlace: ownAction && !this.placed,
+        canEndTurn: ownAction && (this.placed || this.usedCard),
         privateState: {
           shop: slots.map((id, index) => ({ card: id === null ? null : cardView(id), blocked: blocks[index] !== null })),
-          bench: bench.map(({ cardId, star }) => ({ ...cardView(cardId), star, canDiscard: canDiscard(cardId) })),
+          bench: bench.map(({ cardId, star, piggy }) => ({
+            ...cardView(cardId), star, canDiscard: canDiscard(cardId),
+            canUse: ownAction && !this.usedCard && canUseNormal(cardId) && (!this.placed || canPairWithMark(cardId)),
+            piggy: piggy && { noSpendRounds: piggy.noSpendRounds, totalEarned: piggy.totalEarned },
+          })),
           hold, freeRerolls, curseProgress: { ...curseProgress }, transactions: [...transactions],
         },
       },
@@ -291,8 +334,9 @@ export class Room {
         return;
       }
       const coins = this.coins[seat];
-      const result = command.type === 'reroll' ? reroll(player.shop, coins, this.round, this.shopRng[seat])
-        : command.type === 'buy' ? buy(player.shop, coins, command.slot)
+      const result = command.type === 'reroll'
+        ? reroll(player.shop, coins, this.round, this.shopRng[seat], this.rarityStar(player, this.round))
+        : command.type === 'buy' ? buy(player.shop, coins, command.slot, this.round)
           : discard(player.shop, coins, command.slot);
       if ('error' in result) return result.error;
       player.shop = result.shop;
@@ -305,11 +349,33 @@ export class Room {
       this.markReady(player.seat, at);
       return;
     }
-    if (command.type === 'place') {
+    if (command.type === 'place' || command.type === 'useCard' || command.type === 'endTurn') {
       if (this.phase !== 'ACTION') return ErrorCode.WrongPhase;
       if (this.choiceWindow) return ErrorCode.ChoicePending;
-      if (player.seat !== this.game.turn) return ErrorCode.WrongTurn;
-      return this.place(command.row, command.col, at);
+      const seat = player.seat;
+      if (seat !== this.game.turn) return ErrorCode.WrongTurn;
+      const hairActive = timedEffectActive(player.effects.hair, this.round);
+      if (command.type === 'place') {
+        if (this.placed) return ErrorCode.ActionUsed;
+        return this.place(command.row, command.col, at, hairActive);
+      }
+      if (command.type === 'endTurn') {
+        if (!this.placed && !this.usedCard) return ErrorCode.CannotUseCard;
+        this.endAction(at);
+        return;
+      }
+      if (this.usedCard) return ErrorCode.ActionUsed;
+      const card = player.shop.bench[command.slot];
+      if (!card) return ErrorCode.EmptySlot;
+      if (!canUseNormal(card.cardId) || (this.placed && !canPairWithMark(card.cardId))) return ErrorCode.CannotUseCard;
+      const effect = activateNormal(card, player.shop, player.effects, this.round, this.rng);
+      player.shop = { ...effect.shop, bench: effect.shop.bench.filter((_, index) => index !== command.slot) };
+      player.effects = effect.effects;
+      this.coins[seat] += effect.coins;
+      this.lastCard = { seat, name: cardDefinition(card.cardId).name };
+      if (hairActive && !this.placed && canPairWithMark(card.cardId)) this.usedCard = true;
+      else this.endAction(at);
+      return;
     }
 
     if (this.phase !== 'LOBBY') return ErrorCode.WrongPhase;
