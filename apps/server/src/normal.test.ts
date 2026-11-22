@@ -5,7 +5,7 @@ import { Room } from './room.ts';
 import type { Player } from './room.ts';
 
 function setup() {
-  const room = new Room('NORMAL', () => 'heads', { now: () => 0, rng: { next: () => 0 } });
+  const room = new Room('NORMAL', () => 'heads', { now: () => 0, rng: { next: () => 0 }, roundTransitionMs: 0 });
   const x = room.join();
   const o = room.join();
   let id = 0;
@@ -29,13 +29,14 @@ test.each([true, false])('Hair-Trigger permits exactly one of each action, mark 
   ready();
   expect(send(o, { type: 'useCard', slot: 0 }).error).toBe('WRONG_TURN');
   expect(send(x, { type: 'useCard', slot: 0 }).error).toBeUndefined();
-  expect(room.snapshot(x).turn).toBe('O');
+  expect(room.snapshot(x)).toMatchObject({ turn: 'O', you: { hairTrigger: { from: 2, through: 2 } } });
   send(o, { type: 'place', row: 1, col: 0 });
   ready();
   const mark = { type: 'place', row: 0, col: 0 } as const;
   const card = { type: 'useCard', slot: 0 } as const;
   expect(send(x, markFirst ? mark : card).error).toBeUndefined();
-  expect(room.snapshot(x)).toMatchObject({ turn: 'X', you: { canEndTurn: true } });
+  expect(room.snapshot(x)).toMatchObject({ turn: 'X', you: { canEndTurn: true, canPlace: !markFirst } });
+  if (markFirst) expect(room.snapshot(x).you.privateState.bench[0].canUse).toBe(true);
   expect(send(x, markFirst ? { ...mark, col: 2 } : card).error).toBe('ACTION_USED');
   if (markFirst) expect(send(x, { type: 'useCard', slot: 1 }).error).toBe('CANNOT_USE_CARD');
   expect(send(x, markFirst ? card : mark).error).toBeUndefined();
@@ -171,4 +172,50 @@ test('both seats must wait until a scheduled Ultimatum expires before using anot
   ready();
   expect(room.snapshot(x).ultimatumLocked).toBe(false);
   expect(send(x, { type: 'useCard', slot: 0 }).error).toBeUndefined();
+});
+
+test('New Angle consumes a card only on a legal move and can pair with one mark', () => {
+  const { room, x, o, send, ready } = setup();
+  x.shop.bench = [{ cardId: 'BUF-R01', star: 1 }];
+  ready();
+  expect(room.snapshot(x).you.privateState.bench[0].canUse).toBe(false);
+  send(x, { type: 'place', row: 0, col: 0 });
+  send(o, { type: 'place', row: 1, col: 0 });
+  x.effects.hair = { star: 1, from: 2, through: 2 };
+  ready();
+  const use = { type: 'useCard', slot: 0, move: { from: { row: 0, col: 0 }, to: { row: 0, col: 2 } } } as const;
+  expect(send(x, use).error).toBe('INVALID_MOVE');
+  expect(room.snapshot(x).you.privateState.bench[0].canUse).toBe(true);
+  expect(send(x, { ...use, move: { ...use.move, to: { row: 0, col: 1 } } }).error).toBeUndefined();
+  expect(room.snapshot(o).board.slice(0, 2)).toEqual([null, 'X']);
+  expect(room.snapshot(x)).toMatchObject({ turn: 'X', you: { canPlace: true, privateState: { bench: [] } } });
+  expect(send(x, { type: 'place', row: 0, col: 2 }).error).toBeUndefined();
+  expect(room.snapshot(x).turn).toBe('O');
+});
+
+test.each(['alone', 'wall-first', 'mark-first'])('Makeshift Wall allows exactly one mark and one card: %s', order => {
+  const { room, x, o, send, ready } = setup();
+  x.shop.bench = [{ cardId: 'BUF-E01', star: 1 }, { cardId: 'INT-C01', star: 1 }, { cardId: 'BUF-E01', star: 3 }];
+  if (order !== 'alone') x.effects.hair = { star: 1, from: 1, through: 1 };
+  ready();
+  if (order === 'mark-first') send(x, { type: 'place', row: 0, col: 0 });
+  expect(send(x, { type: 'useCard', slot: 0, walls: [] }).error).toBe('INVALID_WALLS');
+  expect(x.shop.bench).toHaveLength(3);
+  expect(send(x, { type: 'useCard', slot: 0, walls: [{ row: 0, col: 1 }] }).error).toBeUndefined();
+  expect(room.snapshot(o).board[1]).toBe('Makeshift Wall');
+  expect(room.snapshot(x).you.wallsRemaining).toBe(2);
+  if (order !== 'mark-first') {
+    expect(room.snapshot(x).you.canPlace).toBe(true);
+    expect(send(x, { type: 'useCard', slot: 0 }).error).toBe('ACTION_USED');
+    expect(send(x, { type: 'place', row: 0, col: 0 }).error).toBeUndefined();
+  }
+  expect(room.snapshot(x)).toMatchObject({ turn: 'O', you: { canPlace: false } });
+  expect(send(x, { type: 'place', row: 0, col: 2 }).error).toBe('WRONG_TURN');
+  send(o, { type: 'place', row: 1, col: 0 });
+  ready();
+  expect(room.snapshot(x).you.privateState.bench[1].canUse).toBe(false);
+  expect(send(x, { type: 'useCard', slot: 1, walls: [
+    { row: 1, col: 1 }, { row: 1, col: 2 }, { row: 1, col: 3 },
+  ] }).error).toBe('INVALID_WALLS');
+  expect(x.shop.bench).toHaveLength(2);
 });

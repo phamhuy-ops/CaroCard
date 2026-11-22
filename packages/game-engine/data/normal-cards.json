@@ -22,6 +22,8 @@
   "hairTrigger": {
     "duration": [1, 2, 3]
   },
+  "newAngle": { "radius": [1, 2, null] },
+  "makeshiftWall": { "wallsByStar": [1, 2, 3], "maxOnBoardPerSeat": 3 },
   "debuff": {
     "disruption": { "rounds": 2, "blocks": [1, 2, 3] },
     "ultimatum": { "blocks": 2, "coinPenalty": 5, "coinThreshold": 10, "destroy": 2, "lockedRounds": 2 },

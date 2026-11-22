@@ -1,5 +1,6 @@
 import { randomBytes, randomInt, randomUUID } from 'node:crypto';
-import { boardSize, createGame, placeTurn } from '@carocard/game-engine';
+import { boardSize, createGame, moveWithNewAngle, newAngleTargets, placeMakeshiftWalls, placeTurn,
+  remainingWallCapacity, wallsForStar } from '@carocard/game-engine';
 import { createRng } from '@carocard/game-engine/rng';
 import type { Rng } from '@carocard/game-engine/rng';
 import { advanceInterest, buy, canDiscard, cardDefinition, createShop, discard, refreshShop, reroll } from '@carocard/game-engine/shop';
@@ -19,6 +20,7 @@ interface RoomOptions {
   rng?: Rng;
   prepDuration?: (seat: Seat) => number;
   roundEndStep?: (step: string, seat: Seat) => void;
+  roundTransitionMs?: number;
 }
 
 export interface Player {
@@ -53,6 +55,7 @@ export class Room {
   private queue: Promise<void> = Promise.resolve();
   private preparation: Record<Seat, Preparation> | null = null;
   private actionDeadline: number | null = null;
+  private nextRoundAt: number | null = null;
   private choiceWindow: ChoiceWindow | null = null;
   private pendingUltimatum: { star: number; keepTurn: boolean } | null = null;
   private round = 0;
@@ -69,6 +72,7 @@ export class Room {
   private readonly shopRng: Record<Seat, Rng>;
   private readonly prepDuration: (seat: Seat) => number;
   private readonly roundEndStep?: RoomOptions['roundEndStep'];
+  private readonly roundTransitionMs: number;
 
   constructor(code: string, tossCoin: () => Face = () => randomInt(2) === 0 ? 'heads' : 'tails', options: RoomOptions = {}) {
     this.code = code;
@@ -78,6 +82,7 @@ export class Room {
     this.shopRng = { X: createRng(randomBytes(4).readUInt32LE()), O: createRng(randomBytes(4).readUInt32LE()) };
     this.prepDuration = options.prepDuration ?? (() => timersMs.prep);
     this.roundEndStep = options.roundEndStep;
+    this.roundTransitionMs = options.roundTransitionMs ?? 3000;
   }
 
   enqueue(work: () => void) {
@@ -127,7 +132,7 @@ export class Room {
   }
 
   get nextDeadline() {
-    let next = this.actionDeadline ?? this.choiceWindow?.deadline ?? Infinity;
+    let next = this.actionDeadline ?? this.choiceWindow?.deadline ?? this.nextRoundAt ?? Infinity;
     if (this.preparation) {
       for (const seat of seats) {
         if (!this.preparation[seat].ready) next = Math.min(next, this.preparation[seat].deadline);
@@ -149,7 +154,10 @@ export class Room {
       }
       this.finishExpiredMatch();
       if (!this.running) return;
-      if (this.preparation) {
+      if (this.nextRoundAt === deadline) {
+        this.beginPreparation(deadline);
+        this.revision++;
+      } else if (this.preparation) {
         for (const seat of seats) {
           if (this.preparation?.[seat].deadline === deadline && !this.preparation[seat].ready) {
             this.markReady(seat, deadline);
@@ -190,6 +198,7 @@ export class Room {
     this.phase = 'FINISHED';
     this.preparation = null;
     this.actionDeadline = null;
+    this.nextRoundAt = null;
     this.choiceWindow = null;
     this.pendingUltimatum = null;
   }
@@ -198,6 +207,7 @@ export class Room {
     this.round++;
     this.phase = 'PREPARATION';
     this.actionDeadline = null;
+    this.nextRoundAt = null;
     this.preparation = {
       X: { deadline: at + Math.max(timersMs.minPrep, this.prepDuration('X')), ready: false },
       O: { deadline: at + Math.max(timersMs.minPrep, this.prepDuration('O')), ready: false },
@@ -251,7 +261,9 @@ export class Room {
           if (step === 'shopRefreshAndReroll') this.refreshSeatShop(seat, this.round + 1);
         }
       }
-      this.beginPreparation(at);
+      this.actionDeadline = null;
+      if (this.roundTransitionMs > 0) this.nextRoundAt = at + this.roundTransitionMs;
+      else this.beginPreparation(at);
     } else {
       this.actionDeadline = at + timersMs.action;
     }
@@ -321,6 +333,8 @@ export class Room {
     const { slots, bench, blocks, hold, freeRerolls } = player.shop;
     const ownAction = this.phase === 'ACTION' && !this.choiceWindow && player.seat === this.game.turn;
     const canUseCard = ownAction && !this.usedCard && !hasDebuff(player.effects, 'cardLock', this.round);
+    const wallsRemaining = player.seat ? remainingWallCapacity(this.game, player.seat) : 0;
+    const emptySquares = this.game.board.filter(cell => cell === null).length;
     const ownWindow = this.choiceWindow && this.choiceWindow.seat === player.seat ? { ...this.choiceWindow } : null;
     return {
       roomCode: this.code,
@@ -334,6 +348,7 @@ export class Room {
       coins: { ...this.coins },
       preparation: this.preparation && { X: { ...this.preparation.X }, O: { ...this.preparation.O } },
       actionDeadline: this.actionDeadline,
+      nextRoundAt: this.nextRoundAt,
       choiceWindow: ownWindow,
       ultimatumLocked: this.ultimatumLocked,
       ultimatum: ownWindow && this.pendingUltimatum && player.seat
@@ -346,12 +361,19 @@ export class Room {
         canPlace: ownAction && !this.placed,
         canEndTurn: ownAction && (this.placed || this.usedCard),
         canBuy: !hasDebuff(player.effects, 'buyLock', this.round),
+        wallsRemaining,
+        hairTrigger: player.effects.hair && player.effects.hair.through >= this.round
+          ? { from: player.effects.hair.from, through: player.effects.hair.through } : null,
         privateState: {
           shop: slots.map((id, index) => ({ card: id === null ? null : cardView(id), blocked: blocks[index] !== null })),
           bench: bench.map(({ cardId, star, piggy }) => ({
             ...cardView(cardId), star, canDiscard: canDiscard(cardId),
             canUse: canUseCard && canUseNormal(cardId) && (!this.placed || canPairWithMark(cardId))
-              && (cardId !== 'DEB-R01' || !this.ultimatumLocked),
+              && (cardId !== 'DEB-R01' || !this.ultimatumLocked)
+              && (cardId !== 'BUF-R01' || this.game.board.some((cell, index) =>
+                cell === this.game.turn && newAngleTargets(this.game.board, this.game.turn, star,
+                  { row: Math.floor(index / boardSize), col: index % boardSize }).length > 0))
+              && (cardId !== 'BUF-E01' || wallsForStar(star) <= Math.min(wallsRemaining, emptySquares)),
             piggy: piggy && { noSpendRounds: piggy.noSpendRounds, totalEarned: piggy.totalEarned },
           })),
           hold, freeRerolls, curseProgress: { ...curseProgress }, transactions: [...transactions],
@@ -428,11 +450,26 @@ export class Room {
       if (!card) return ErrorCode.EmptySlot;
       if (card.cardId === 'DEB-R01' && this.ultimatumLocked) return ErrorCode.UltimatumActive;
       if (!canUseNormal(card.cardId) || (this.placed && !canPairWithMark(card.cardId))) return ErrorCode.CannotUseCard;
+      const isNewAngle = card.cardId === 'BUF-R01';
+      const isMakeshiftWall = card.cardId === 'BUF-E01';
+      if (isNewAngle !== Boolean(command.move)) return ErrorCode.InvalidMove;
+      if (isMakeshiftWall !== Boolean(command.walls)) return ErrorCode.InvalidWalls;
+      const moved = command.move && moveWithNewAngle(this.game, card.star, command.move.from, command.move.to);
+      if (isNewAngle && !moved) return ErrorCode.InvalidMove;
+      const built = command.walls && placeMakeshiftWalls(this.game, card.star, command.walls);
+      if (isMakeshiftWall && !built) return ErrorCode.InvalidWalls;
+      const boardAction = moved || built;
       const definition = cardDefinition(card.cardId);
-      const keepTurn = hairActive && !this.placed && canPairWithMark(card.cardId);
+      const keepTurn = !this.placed && (isMakeshiftWall || (hairActive && canPairWithMark(card.cardId)));
       player.shop = { ...player.shop, bench: player.shop.bench.filter((_, index) => index !== command.slot) };
       this.lastCard = { seat, name: definition.name };
-      if (definition.group === 'debuff') {
+      if (boardAction) {
+        this.game = boardAction;
+        if (boardAction.result) {
+          this.finish();
+          return;
+        }
+      } else if (definition.group === 'debuff') {
         const otherSeat = seat === 'X' ? 'O' : 'X';
         const opponent = this.players.find(other => other.seat === otherSeat);
         if (!opponent) throw new Error('Opponent missing');

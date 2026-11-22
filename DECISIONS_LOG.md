@@ -161,3 +161,21 @@
 - Trả lời nguyên văn: Ok tiếp tục
 - Quyết định: Commit M5b bằng tiếng Việt và đẩy lên GitHub trước khi sang P-02 của M5c.
 - File bị ảnh hưởng: DECISIONS_LOG.md và các tệp triển khai M5b.
+
+## 2026-11-22 — P-02 (M5c)
+
+- Trả lời nguyên văn: A
+- Quyết định: Duyệt kế hoạch M5c. Triển khai New Angle trước, dừng ở D-01 trước khi triển khai Makeshift Wall.
+- File bị ảnh hưởng: packages/game-engine/, packages/shared/, apps/server/, apps/web/ và DECISIONS_LOG.md.
+
+## 2026-11-22 — D-01 (M5c)
+
+- Trả lời nguyên văn: A
+- Quyết định: Tối đa 3 Makeshift Wall còn tồn tại trên bàn cho mỗi ghế. Mỗi lần dùng phải đủ số ô theo sao; tường bị phá giải phóng chỗ cho chủ sở hữu.
+- File bị ảnh hưởng: packages/game-engine/, packages/shared/, apps/server/, apps/web/ và DECISIONS_LOG.md.
+
+## 2026-11-22 — Nghiệm thu và P-05 (M5c)
+
+- Trả lời nguyên văn: Ok vậy là đc ko cần thử đâu tiếp tục push lên git
+- Quyết định: Nghiệm thu M5c dựa trên kết quả kiểm tra hiện có, không yêu cầu thêm lượt chơi thử thủ công. Tạo commit tiếng Việt và đẩy nhánh main lên GitHub.
+- File bị ảnh hưởng: DECISIONS_LOG.md và các tệp triển khai M5c.

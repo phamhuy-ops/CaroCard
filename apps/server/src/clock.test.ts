@@ -4,13 +4,14 @@ import { gameConstants } from '@carocard/shared';
 
 const { prep, action, minPrep, seatHold, popup } = gameConstants.timersMs;
 
-function startedRoom() {
+function startedRoom(roundTransitionMs = 0) {
   const steps: string[] = [];
   const room = new Room('CLOCK', () => 'heads', {
     rng: { next: () => 0 },
     prepDuration: seat => seat === 'X' ? 1 : prep,
     roundEndStep: (step, seat) => steps.push(`${step}:${seat}`),
     now: () => 0,
+    roundTransitionMs,
   });
   const x = room.join();
   const o = room.join();
@@ -21,13 +22,28 @@ function startedRoom() {
   return { room, x, o, steps };
 }
 
-function actionRoom() {
-  const context = startedRoom();
+function actionRoom(roundTransitionMs = 0) {
+  const context = startedRoom(roundTransitionMs);
   for (const player of [context.x, context.o]) {
     context.room.execute(player, { type: 'ready', expectedPhase: 'PREPARATION', commandId: 'ready' }, 0);
   }
   return context;
 }
+
+test('round results apply once and both seats enter the next preparation after three seconds', () => {
+  const { room, x, o, steps } = actionRoom(3000);
+  const move = { type: 'place', expectedPhase: 'ACTION', commandId: 'move', row: 0, col: 0 } as const;
+  room.execute(x, move, 10);
+  room.execute(o, { ...move, row: 1 }, 20);
+  expect(room.snapshot(x)).toMatchObject({ phase: 'ROUND_END', round: 1, nextRoundAt: 3020, coins: { X: 4, O: 5 } });
+  expect(room.snapshot(o).nextRoundAt).toBe(3020);
+  room.advance(3019);
+  expect(room.snapshot(x).preparation).toBeNull();
+  room.advance(3021);
+  expect(room.snapshot(x)).toMatchObject({ phase: 'PREPARATION', round: 2, nextRoundAt: null,
+    preparation: { X: { deadline: 3020 + minPrep }, O: { deadline: 3020 + prep } } });
+  expect(steps).toHaveLength(gameConstants.roundEndOrder.length * 2);
+});
 
 test('preparation has separate deadlines, a minimum duration and early readiness', () => {
   const { room, x, o } = startedRoom();

@@ -9,12 +9,18 @@ const commandFields = {
   expectedPhase: phase,
 };
 
+const squareSchema = z.strictObject({ row: z.int().nonnegative(), col: z.int().nonnegative() });
+
 export const commandSchema = z.discriminatedUnion('type', [
   z.strictObject({ ...commandFields, type: z.literal('chooseFace'), face }),
   z.strictObject({ ...commandFields, type: z.literal('toss') }),
   z.strictObject({ ...commandFields, type: z.literal('start') }),
   z.strictObject({ ...commandFields, type: z.literal('ready') }),
-  z.strictObject({ ...commandFields, type: z.literal('useCard'), slot: z.int().nonnegative() }),
+  z.strictObject({
+    ...commandFields, type: z.literal('useCard'), slot: z.int().nonnegative(),
+    move: z.strictObject({ from: squareSchema, to: squareSchema }).optional(),
+    walls: z.array(squareSchema).optional(),
+  }),
   z.strictObject({ ...commandFields, type: z.literal('endTurn') }),
   z.strictObject({ ...commandFields, type: z.literal('answerUltimatum'), windowId: z.uuid(), choice: z.enum(['accept', 'resist']) }),
   z.strictObject({ ...commandFields, type: z.literal('toggleHold'), round: z.int().positive() }),
@@ -72,6 +78,8 @@ export const ErrorCode = {
   BuyLocked: 'BUY_LOCKED',
   CardLocked: 'CARD_LOCKED',
   UltimatumActive: 'ULTIMATUM_ACTIVE',
+  InvalidMove: 'INVALID_MOVE',
+  InvalidWalls: 'INVALID_WALLS',
 } as const;
 
 export type ErrorCode = typeof ErrorCode[keyof typeof ErrorCode];
@@ -129,6 +137,7 @@ export interface Snapshot {
   coins: Record<Seat, number>;
   preparation: Record<Seat, Preparation> | null;
   actionDeadline: number | null;
+  nextRoundAt: number | null;
   choiceWindow: ChoiceWindow | null;
   ultimatumLocked: boolean;
   ultimatum: {
@@ -139,7 +148,10 @@ export interface Snapshot {
   turn: Seat | null;
   result: { kind: 'win'; winner: Seat; reason: 'hellsDealer' | 'fiveInRow' | 'disconnect' }
     | { kind: 'draw' | 'cancelled' } | null;
-  you: PublicPlayer & { privateState: PrivateState; canPlace: boolean; canEndTurn: boolean; canBuy: boolean };
+  you: PublicPlayer & {
+    privateState: PrivateState; canPlace: boolean; canEndTurn: boolean; canBuy: boolean; wallsRemaining: number;
+    hairTrigger: { from: number; through: number } | null;
+  };
 }
 
 export interface CommandResult {
